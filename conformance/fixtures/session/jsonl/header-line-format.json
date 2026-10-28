@@ -1,0 +1,13 @@
+{
+  "caseId": "session.jsonl.header-line-format",
+  "ok": true,
+  "output": {
+    "type": "session",
+    "version": 4,
+    "id": "sess-1",
+    "createdAt": 1700000000,
+    "cwd": "/workspace",
+    "isSeeded": false,
+    "delegationDepth": 0
+  }
+}

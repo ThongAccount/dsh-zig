@@ -1,0 +1,13 @@
+{
+  "caseId": "llm.retry.rate-limit-backoff",
+  "ok": true,
+  "output": {
+    "code": "RATE_LIMIT",
+    "name": "LlmError",
+    "failure": {
+      "message": "DeepSeek Messages request failed (429)",
+      "code": "RATE_LIMIT",
+      "status": 429
+    }
+  }
+}

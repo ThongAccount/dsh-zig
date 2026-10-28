@@ -1,0 +1,10 @@
+# Build artifacts
+.zig-cache/
+zig-out/
+temp/
+
+# Nested source checkout (separate repo)
+original/
+
+# OS
+.DS_Store

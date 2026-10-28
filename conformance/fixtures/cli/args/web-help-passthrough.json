@@ -1,0 +1,12 @@
+{
+  "caseId": "cli.args.web-help-passthrough",
+  "ok": true,
+  "output": {
+    "mode": "profile",
+    "profile": "web",
+    "patches": [],
+    "args": [
+      "-h"
+    ]
+  }
+}

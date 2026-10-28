@@ -1,0 +1,17 @@
+{
+  "caseId": "llm.sse.text-chunk-events",
+  "ok": true,
+  "output": {
+    "events": [
+      {
+        "type": "text",
+        "text": "hello"
+      },
+      {
+        "type": "text",
+        "text": " world"
+      }
+    ],
+    "activityCalls": 0
+  }
+}

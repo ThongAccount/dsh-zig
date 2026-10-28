@@ -1,0 +1,17 @@
+{
+  "caseId": "cli.args.late-patch-belongs-to-app",
+  "ok": true,
+  "output": {
+    "mode": "profile",
+    "profile": "tui",
+    "patches": [
+      "a.yml"
+    ],
+    "args": [
+      "--resume",
+      "b",
+      "--patch",
+      "late.yml"
+    ]
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "caseId": "cli.args.reject-missing-profile",
+  "ok": false,
+  "error": "exit(1)",
+  "exitCode": 1
+}

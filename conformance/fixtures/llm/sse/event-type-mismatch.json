@@ -1,0 +1,12 @@
+{
+  "caseId": "llm.sse.event-type-mismatch",
+  "ok": true,
+  "output": {
+    "events": [
+      {
+        "type": "text"
+      }
+    ],
+    "activityCalls": 0
+  }
+}

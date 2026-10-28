@@ -1,0 +1,45 @@
+{
+  "schema": "conformance.scenario.v1",
+  "category": "session",
+  "description": "Session persistence — JSONL header line encoding and validation.",
+  "target": "node",
+  "entry": "packages/session/session-persistence-jsonl/src/format.ts",
+  "function": "toHeaderLine",
+  "scenarios": [
+    {
+      "id": "session.jsonl.header-line-format",
+      "description": "Header line encodes type, version, id, createdAt, cwd, and flags.",
+      "input": {
+        "header": { "version": 4, "id": "sess-1", "createdAt": 1700000000, "cwd": "/workspace", "isSeeded": false, "delegationDepth": 0 },
+        "inheritedEventCount": 0
+      },
+      "expected": { "type": "session", "version": 4, "id": "sess-1", "createdAt": 1700000000, "cwd": "/workspace", "isSeeded": false, "delegationDepth": 0 }
+    },
+    {
+      "id": "session.jsonl.header-no-cwd",
+      "description": "Header without optional cwd omits the field.",
+      "input": {
+        "header": { "version": 4, "id": "sess-2", "createdAt": 1700000001, "isSeeded": false, "delegationDepth": 0 },
+        "inheritedEventCount": 0
+      },
+      "expected": { "type": "session", "version": 4, "id": "sess-2", "createdAt": 1700000001, "isSeeded": false, "delegationDepth": 0 }
+    },
+    {
+      "id": "session.jsonl.header-seeded-requires-count",
+      "description": "Seeded header without inheritedEventCount throws.",
+      "input": {
+        "header": { "version": 4, "id": "sess-3", "createdAt": 1700000002, "isSeeded": true, "delegationDepth": 0 }
+      },
+      "expected": { "throws": true }
+    },
+    {
+      "id": "session.jsonl.header-unnseeded-with-count",
+      "description": "Unseeded header with non-zero inheritedEventCount throws.",
+      "input": {
+        "header": { "version": 4, "id": "sess-4", "createdAt": 1700000003, "isSeeded": false, "delegationDepth": 0 },
+        "inheritedEventCount": 5
+      },
+      "expected": { "throws": true }
+    }
+  ]
+}

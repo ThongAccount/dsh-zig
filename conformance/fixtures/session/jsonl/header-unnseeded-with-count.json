@@ -1,0 +1,5 @@
+{
+  "caseId": "session.jsonl.header-unnseeded-with-count",
+  "ok": false,
+  "error": "unseeded session header inherited event count must be 0"
+}

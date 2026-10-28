@@ -1,0 +1,13 @@
+{
+  "caseId": "llm.retry.transient-failure-retries",
+  "ok": true,
+  "output": {
+    "code": "SERVER",
+    "name": "LlmError",
+    "failure": {
+      "message": "DeepSeek Messages request failed (503)",
+      "code": "SERVER",
+      "status": 503
+    }
+  }
+}

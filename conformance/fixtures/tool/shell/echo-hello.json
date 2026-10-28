@@ -1,0 +1,9 @@
+{
+  "caseId": "tool.shell.echo-hello",
+  "ok": true,
+  "output": {
+    "stdout": "hello\n",
+    "stderr": "",
+    "exitCode": 0
+  }
+}

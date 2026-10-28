@@ -1,0 +1,10 @@
+{
+  "caseId": "cli.args.dump-config",
+  "ok": true,
+  "output": {
+    "mode": "dump-config",
+    "profile": "web",
+    "defaultOnly": false,
+    "patches": []
+  }
+}

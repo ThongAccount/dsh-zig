@@ -1,0 +1,11 @@
+{
+  "caseId": "cli.args.from-default-profile",
+  "ok": true,
+  "output": {
+    "mode": "profile",
+    "profile": "rescue",
+    "fromDefaultProfile": "web",
+    "patches": [],
+    "args": []
+  }
+}

@@ -1,0 +1,5 @@
+{
+  "caseId": "config.patch-layering.js-expr-verbatim",
+  "ok": true,
+  "output": "# == base.yml\n- id: shared\n  config:\n    key: !!js process.env.X\n"
+}

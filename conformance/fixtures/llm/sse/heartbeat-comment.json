@@ -1,0 +1,13 @@
+{
+  "caseId": "llm.sse.heartbeat-comment",
+  "ok": true,
+  "output": {
+    "events": [
+      {
+        "type": "text",
+        "text": "ok"
+      }
+    ],
+    "activityCalls": 0
+  }
+}

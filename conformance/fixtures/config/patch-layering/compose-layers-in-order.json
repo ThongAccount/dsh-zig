@@ -1,0 +1,5 @@
+{
+  "caseId": "config.patch-layering.compose-layers-in-order",
+  "ok": true,
+  "output": "# == base.yml, patched by surface.yml\n- id: shared\n  name: ./noop.mjs\n  config:\n    value: surface\n    key: !!js process.env.DSH_DUMP_SPEC\n# == base.yml\n- id: untouched\n  name: ./noop.mjs\n# == surface.yml, patched by user.yml\n- id: surface-extra\n  name: ./noop.mjs\n  config:\n    value: user\n"
+}

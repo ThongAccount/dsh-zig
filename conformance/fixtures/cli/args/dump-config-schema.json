@@ -1,0 +1,9 @@
+{
+  "caseId": "cli.args.dump-config-schema",
+  "ok": true,
+  "output": {
+    "mode": "dump-config-schema",
+    "profile": "web",
+    "patches": []
+  }
+}

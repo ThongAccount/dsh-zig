@@ -1,0 +1,12 @@
+{
+  "caseId": "session.jsonl.header-no-cwd",
+  "ok": true,
+  "output": {
+    "type": "session",
+    "version": 4,
+    "id": "sess-2",
+    "createdAt": 1700000001,
+    "isSeeded": false,
+    "delegationDepth": 0
+  }
+}

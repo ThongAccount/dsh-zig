@@ -1,0 +1,5 @@
+{
+  "caseId": "config.slice1.load",
+  "ok": true,
+  "output": "# == base.yml\n- id: shared\n  name: ./noop.mjs\n  config:\n    value: base\n    key: !!js process.env.X\n- id: untouched\n  name: ./noop.mjs\n"
+}

@@ -1,0 +1,12 @@
+{
+  "caseId": "llm.retry.sse-stream-error",
+  "ok": true,
+  "output": {
+    "code": "SERVER",
+    "name": "LlmError",
+    "failure": {
+      "message": "DeepSeek Messages request failed (stream error)",
+      "code": "SERVER"
+    }
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "schema": "conformance.scenario.v1",
+  "category": "tool",
+  "description": "Shell command execution via spawnSync — stdout, stderr, and exit code parity with Node reference.",
+  "target": "node",
+  "entry": "../conformance/tool-spawn.ts",
+  "function": "spawnSync",
+  "scenarios": [
+    {
+      "id": "tool.shell.echo-hello",
+      "description": "Simple command writes to stdout.",
+      "input": { "argv": ["echo", "hello"] },
+      "expected": { "stdout": "hello\n", "stderr": "", "exitCode": 0 }
+    },
+    {
+      "id": "tool.shell.exit-code",
+      "description": "Non-zero exit code is reported.",
+      "input": { "argv": ["bash", "-c", "exit 42"] },
+      "expected": { "stdout": "", "stderr": "", "exitCode": 42 }
+    },
+    {
+      "id": "tool.shell.stderr",
+      "description": "Stderr is captured separately from stdout.",
+      "input": { "argv": ["bash", "-c", "echo error >&2"] },
+      "expected": { "stdout": "", "stderr": "error\n", "exitCode": 0 }
+    },
+    {
+      "id": "tool.shell.stdout-stderr",
+      "description": "Both stdout and stderr are captured.",
+      "input": { "argv": ["bash", "-c", "echo out; echo err >&2"] },
+      "expected": { "stdout": "out\n", "stderr": "err\n", "exitCode": 0 }
+    },
+    {
+      "id": "tool.shell.empty-output",
+      "description": "Command with no output returns empty strings.",
+      "input": { "argv": ["true"] },
+      "expected": { "stdout": "", "stderr": "", "exitCode": 0 }
+    }
+  ]
+}

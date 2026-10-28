@@ -1,0 +1,6 @@
+{
+  "caseId": "cli.args.reject-competing-dumps",
+  "ok": false,
+  "error": "exit(1)",
+  "exitCode": 1
+}

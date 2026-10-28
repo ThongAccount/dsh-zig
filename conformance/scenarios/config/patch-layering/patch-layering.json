@@ -1,0 +1,40 @@
+{
+  "schema": "conformance.scenario.v1",
+  "category": "config",
+  "description": "Config patch layering — composition order, !!js verbatim passthrough, source separators, and skipped-patch warnings.",
+  "target": "node",
+  "entry": "packages/boot/app-boot/src/index.ts",
+  "function": "renderConfigDump",
+  "scenarios": [
+    {
+      "id": "config.patch-layering.compose-layers-in-order",
+      "description": "Overlay layers compose in order; later patches override earlier values.",
+      "input": {
+        "base": "- id: shared\n  name: ./noop.mjs\n  config:\n    value: base\n    key: !!js process.env.DSH_DUMP_SPEC\n- id: untouched\n  name: ./noop.mjs\n",
+        "layers": [
+          { "label": "surface.yml", "patches": [{ "id": "shared", "config": { "value": "surface", "key": { "__jsExpr": "process.env.DSH_DUMP_SPEC" } } }, { "insert": [{ "id": "surface-extra", "name": "./noop.mjs" }] }] },
+          { "label": "user.yml", "patches": [{ "id": "surface-extra", "config": { "value": "user" } }] }
+        ]
+      },
+      "expected": { "contains": ["!!js process.env.DSH_DUMP_SPEC", "# == base.yml, patched by surface.yml", "# == surface.yml, patched by user.yml"], "parsedEqual": true }
+    },
+    {
+      "id": "config.patch-layering.js-expr-verbatim",
+      "description": "!!js expressions print verbatim and round-trip as __jsExpr scalars.",
+      "input": {
+        "base": "- id: shared\n  config: { key: !!js process.env.X }\n",
+        "layers": [{ "label": "base.yml", "patches": [] }]
+      },
+      "expected": { "contains": ["!!js process.env.X"], "parsedEqual": true }
+    },
+    {
+      "id": "config.patch-layering.source-separators",
+      "description": "Each section is labeled with its origin file and every layer that changed it.",
+      "input": {
+        "base": "- id: a\n  config: { v: 1 }\n- id: b\n  config: { v: 2 }\n",
+        "layers": [{ "label": "base.yml", "patches": [{ "id": "a", "config": { "v": 10 } }] }]
+      },
+      "expected": { "contains": ["# == base.yml, patched by base.yml"], "parsedEqual": true }
+    }
+  ]
+}

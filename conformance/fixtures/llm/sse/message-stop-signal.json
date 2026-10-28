@@ -1,0 +1,12 @@
+{
+  "caseId": "llm.sse.message-stop-signal",
+  "ok": true,
+  "output": {
+    "events": [
+      {
+        "type": "message_stop"
+      }
+    ],
+    "activityCalls": 0
+  }
+}

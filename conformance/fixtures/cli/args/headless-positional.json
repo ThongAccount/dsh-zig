@@ -1,0 +1,14 @@
+{
+  "caseId": "cli.args.headless-positional",
+  "ok": true,
+  "output": {
+    "mode": "profile",
+    "profile": "headless",
+    "patches": [],
+    "args": [
+      "run",
+      "the",
+      "tests"
+    ]
+  }
+}

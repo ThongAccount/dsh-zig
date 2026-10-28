@@ -1,0 +1,10 @@
+{
+  "caseId": "cli.args.profile-shorthand",
+  "ok": true,
+  "output": {
+    "mode": "profile",
+    "profile": "web",
+    "patches": [],
+    "args": []
+  }
+}

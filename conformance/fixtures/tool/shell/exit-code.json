@@ -1,0 +1,9 @@
+{
+  "caseId": "tool.shell.exit-code",
+  "ok": true,
+  "output": {
+    "stdout": "",
+    "stderr": "",
+    "exitCode": 42
+  }
+}

@@ -1,0 +1,106 @@
+{
+  "schema": "conformance.scenario.v1",
+  "category": "cli",
+  "description": "DSH CLI argument parsing — launcher flags vs app arguments, dump modes, plugin forwarding, and rejection of invalid input.",
+  "target": "node",
+  "entry": "apps/cli/src/args.ts",
+  "function": "parseDshArgs",
+  "scenarios": [
+    {
+      "id": "cli.args.profile-shorthand",
+      "description": "Positional profile name expands to --profile; remaining args go to the app.",
+      "input": { "argv": ["web"], "version": "1.2.3" },
+      "expected": { "mode": "profile", "profile": "web", "patches": [], "args": [] }
+    },
+    {
+      "id": "cli.args.profile-with-patches",
+      "description": "--profile with repeatable --patch overlays.",
+      "input": { "argv": ["--profile", "tui", "--patch", "a.yml", "--patch", "b.yml"], "version": "1.2.3" },
+      "expected": { "mode": "profile", "profile": "tui", "patches": ["a.yml", "b.yml"], "args": [] }
+    },
+    {
+      "id": "cli.args.from-default-profile",
+      "description": "--from-default-profile initializes a new custom profile from a shipped template.",
+      "input": { "argv": ["--profile", "rescue", "--from-default-profile", "web"], "version": "1.2.3" },
+      "expected": { "mode": "profile", "profile": "rescue", "fromDefaultProfile": "web", "patches": [], "args": [] }
+    },
+    {
+      "id": "cli.args.app-flags-pass-through",
+      "description": "Launcher flags end at the first unrecognized token; app flags pass through verbatim.",
+      "input": { "argv": ["--profile", "tui", "--resume", "abc"], "version": "1.2.3" },
+      "expected": { "mode": "profile", "profile": "tui", "patches": [], "args": ["--resume", "abc"] }
+    },
+    {
+      "id": "cli.args.web-help-passthrough",
+      "description": "App -h passes through to the web app, not the launcher.",
+      "input": { "argv": ["--profile", "web", "-h"], "version": "1.2.3" },
+      "expected": { "mode": "profile", "profile": "web", "patches": [], "args": ["-h"] }
+    },
+    {
+      "id": "cli.args.headless-positional",
+      "description": "Headless profile with task positionals passed to the app.",
+      "input": { "argv": ["--profile", "headless", "run", "the", "tests"], "version": "1.2.3" },
+      "expected": { "mode": "profile", "profile": "headless", "patches": [], "args": ["run", "the", "tests"] }
+    },
+    {
+      "id": "cli.args.late-patch-belongs-to-app",
+      "description": "Launcher flags before the boundary are consumed; flags after belong to the app.",
+      "input": { "argv": ["--profile", "tui", "--patch", "a.yml", "--resume", "b", "--patch", "late.yml"], "version": "1.2.3" },
+      "expected": { "mode": "profile", "profile": "tui", "patches": ["a.yml"], "args": ["--resume", "b", "--patch", "late.yml"] }
+    },
+    {
+      "id": "cli.args.dump-config",
+      "description": "--dump-config routes to dump-config mode without app arguments.",
+      "input": { "argv": ["--profile", "web", "--dump-config"], "version": "1.2.3" },
+      "expected": { "mode": "dump-config", "profile": "web", "defaultOnly": false, "patches": [] }
+    },
+    {
+      "id": "cli.args.dump-default-config",
+      "description": "--dump-default-config prints bundle layers only.",
+      "input": { "argv": ["--profile", "web", "--dump-default-config"], "version": "1.2.3" },
+      "expected": { "mode": "dump-config", "profile": "web", "defaultOnly": true, "patches": [] }
+    },
+    {
+      "id": "cli.args.dump-config-schema",
+      "description": "--dump-config-schema prints JSON Schema without mounting.",
+      "input": { "argv": ["--profile", "web", "--dump-config-schema"], "version": "1.2.3" },
+      "expected": { "mode": "dump-config-schema", "profile": "web", "patches": [] }
+    },
+    {
+      "id": "cli.args.plugin-forwarding",
+      "description": "plugin mode forwards pnpm arguments verbatim.",
+      "input": { "argv": ["plugin", "--profile", "tui", "add", "turtle-ui"], "version": "1.2.3" },
+      "expected": { "mode": "plugin", "profile": "tui", "args": ["add", "turtle-ui"] }
+    },
+    {
+      "id": "cli.args.version-flag",
+      "description": "--version exits 0; shorthand -V exits 0.",
+      "input": { "argv": ["--version"], "version": "1.2.3" },
+      "expected": { "exitCode": 0 }
+    },
+    {
+      "id": "cli.args.reject-missing-profile",
+      "description": "No profile is an error (exit 1).",
+      "input": { "argv": [], "version": "1.2.3" },
+      "expected": { "exitCode": 1 }
+    },
+    {
+      "id": "cli.args.reject-competing-dumps",
+      "description": "Multiple dump flags are mutually exclusive (exit 1).",
+      "input": { "argv": ["--dump-config", "--dump-default-config"], "version": "1.2.3" },
+      "expected": { "exitCode": 1 }
+    },
+    {
+      "id": "cli.args.reject-desktop-profile",
+      "description": "desktop profile is reserved for the Electron application (exit 1).",
+      "input": { "argv": ["--profile", "desktop"], "version": "1.2.3" },
+      "expected": { "exitCode": 1 }
+    },
+    {
+      "id": "cli.args.help-flag",
+      "description": "--help prints launcher help and exits 0.",
+      "input": { "argv": ["--help"], "version": "1.2.3" },
+      "expected": { "exitCode": 0 }
+    }
+  ]
+}

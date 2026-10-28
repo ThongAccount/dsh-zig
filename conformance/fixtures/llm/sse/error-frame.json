@@ -1,0 +1,5 @@
+{
+  "caseId": "llm.sse.error-frame",
+  "ok": false,
+  "error": "bad request"
+}

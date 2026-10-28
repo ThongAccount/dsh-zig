@@ -1,0 +1,5 @@
+{
+  "caseId": "config.slice1.apply",
+  "ok": true,
+  "output": "# == base.yml, patched by patch.yml\n- id: a\n  config:\n    v: 10\n# == base.yml\n- id: b\n  config:\n    v: 2\n"
+}

@@ -1,0 +1,9 @@
+{
+  "caseId": "tool.shell.stdout-stderr",
+  "ok": true,
+  "output": {
+    "stdout": "out\n",
+    "stderr": "err\n",
+    "exitCode": 0
+  }
+}

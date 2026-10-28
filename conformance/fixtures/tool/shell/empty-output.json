@@ -1,0 +1,9 @@
+{
+  "caseId": "tool.shell.empty-output",
+  "ok": true,
+  "output": {
+    "stdout": "",
+    "stderr": "",
+    "exitCode": 0
+  }
+}

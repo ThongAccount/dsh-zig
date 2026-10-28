@@ -1,0 +1,13 @@
+{
+  "caseId": "cli.args.profile-with-patches",
+  "ok": true,
+  "output": {
+    "mode": "profile",
+    "profile": "tui",
+    "patches": [
+      "a.yml",
+      "b.yml"
+    ],
+    "args": []
+  }
+}

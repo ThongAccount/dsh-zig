@@ -1,0 +1,12 @@
+{
+  "caseId": "cli.args.plugin-forwarding",
+  "ok": true,
+  "output": {
+    "mode": "plugin",
+    "profile": "tui",
+    "args": [
+      "add",
+      "turtle-ui"
+    ]
+  }
+}

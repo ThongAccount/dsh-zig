@@ -1,0 +1,40 @@
+{
+  "schema": "conformance.scenario.v1",
+  "category": "llm",
+  "description": "LLM retry and error paths — transient failures retry, permanent failures fail fast, rate limits back off, and SSE stream errors surface.",
+  "target": "node",
+  "entry": "packages/llm/llm-deepseek/src/transport.ts",
+  "function": "providerError",
+  "scenarios": [
+    {
+      "id": "llm.retry.transient-failure-retries",
+      "description": "Transient HTTP errors (5xx, network) are retried with backoff.",
+      "input": { "status": 503, "retryable": true },
+      "expected": { "retry": true, "maxAttempts": 3 }
+    },
+    {
+      "id": "llm.retry.permanent-failure-fails-fast",
+      "description": "Permanent errors (400, 401, 403) are not retried.",
+      "input": { "status": 401, "retryable": false },
+      "expected": { "retry": false }
+    },
+    {
+      "id": "llm.retry.rate-limit-backoff",
+      "description": "429 rate-limit responses back off per Retry-After header.",
+      "input": { "status": 429, "retryAfter": 2 },
+      "expected": { "retry": true, "backoffSeconds": 2 }
+    },
+    {
+      "id": "llm.retry.sse-stream-error",
+      "description": "An SSE stream that dies mid-stream is treated as a retryable transient error.",
+      "input": { "streamDied": true, "bytesReceived": 1024 },
+      "expected": { "retry": true }
+    },
+    {
+      "id": "llm.retry.exhausted-attempts",
+      "description": "After max attempts, the last error surfaces to the caller.",
+      "input": { "status": 503, "attempts": 3 },
+      "expected": { "retry": false, "surfacesLastError": true }
+    }
+  ]
+}

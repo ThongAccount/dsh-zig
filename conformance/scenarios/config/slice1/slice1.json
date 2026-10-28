@@ -1,0 +1,30 @@
+{
+  "schema": "conformance.scenario.v1",
+  "category": "config",
+  "description": "Slice 1: YAML config loading and patch application.",
+  "target": "node",
+  "entry": "packages/boot/app-boot/src/index.ts",
+  "function": "renderConfigDump",
+  "scenarios": [
+    {
+      "id": "config.slice1.load",
+      "description": "Load a base YAML config with no layers; output is the parsed entry list rendered as YAML with source labels.",
+      "input": {
+        "base": "- id: shared\n  name: ./noop.mjs\n  config:\n    value: base\n    key: !!js process.env.X\n- id: untouched\n  name: ./noop.mjs\n",
+        "layers": []
+      },
+      "expected": { "parsedEqual": true }
+    },
+    {
+      "id": "config.slice1.apply",
+      "description": "Apply a single patch layer to base entries; output is the patched entry list rendered as YAML with source-and-patches labels.",
+      "input": {
+        "base": "- id: a\n  config: { v: 1 }\n- id: b\n  config: { v: 2 }\n",
+        "layers": [
+          { "label": "patch.yml", "patches": [{ "id": "a", "config": { "v": 10 } }] }
+        ]
+      },
+      "expected": { "parsedEqual": true }
+    }
+  ]
+}

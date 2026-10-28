@@ -1,0 +1,6 @@
+{
+  "caseId": "cli.args.help-flag",
+  "ok": false,
+  "error": "exit(0)",
+  "exitCode": 0
+}

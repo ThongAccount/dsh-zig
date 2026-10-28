@@ -1,0 +1,6 @@
+{
+  "caseId": "cli.args.version-flag",
+  "ok": false,
+  "error": "exit(0)",
+  "exitCode": 0
+}

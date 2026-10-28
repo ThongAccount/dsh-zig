@@ -1,0 +1,13 @@
+{
+  "caseId": "llm.retry.permanent-failure-fails-fast",
+  "ok": true,
+  "output": {
+    "code": "AUTH",
+    "name": "LlmError",
+    "failure": {
+      "message": "DeepSeek Messages request failed (401)",
+      "code": "AUTH",
+      "status": 401
+    }
+  }
+}

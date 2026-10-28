@@ -1,0 +1,46 @@
+{
+  "schema": "conformance.scenario.v1",
+  "category": "llm",
+  "description": "DeepSeek LLM SSE streaming — event parsing, message types, completion signals, error frames, and malformed response handling.",
+  "target": "node",
+  "entry": "packages/llm/llm-deepseek/src/sse.ts",
+  "function": "parseSse",
+  "scenarios": [
+    {
+      "id": "llm.sse.text-chunk-events",
+      "description": "SSE text chunk events parse into typed records with delta content.",
+      "input": { "frames": ["data: {\"type\":\"text\",\"text\":\"hello\"}", "data: {\"type\":\"text\",\"text\":\" world\"}"], "eventType": "text" },
+      "expected": { "eventCount": 2, "types": ["text", "text"] }
+    },
+    {
+      "id": "llm.sse.message-stop-signal",
+      "description": "message_stop signals completion of an assistant turn.",
+      "input": { "frames": ["data: {\"type\":\"message_stop\"}"], "eventType": "message_stop" },
+      "expected": { "eventCount": 1, "types": ["message_stop"] }
+    },
+    {
+      "id": "llm.sse.error-frame",
+      "description": "SSE error frames throw LlmError with provider error code.",
+      "input": { "frames": ["data: {\"type\":\"error\",\"error\":{\"code\":\"INVALID_REQUEST\",\"message\":\"bad request\"}}"] },
+      "expected": { "throws": "LlmError", "code": "INVALID_REQUEST" }
+    },
+    {
+      "id": "llm.sse.event-type-mismatch",
+      "description": "Frame event field mismatching the JSON type throws MALFORMED_RESPONSE.",
+      "input": { "frames": ["data: {\"type\":\"text\"}"], "frameEvent": "image" },
+      "expected": { "throws": "LlmError", "code": "MALFORMED_RESPONSE" }
+    },
+    {
+      "id": "llm.sse.invalid-json",
+      "description": "Invalid JSON in SSE data throws MALFORMED_RESPONSE.",
+      "input": { "frames": ["data: not-json-at-all"] },
+      "expected": { "throws": "LlmError", "code": "MALFORMED_RESPONSE" }
+    },
+    {
+      "id": "llm.sse.heartbeat-comment",
+      "description": "SSE comment lines (heartbeats) pulse the activity watchdog and yield no event.",
+      "input": { "frames": [": heartbeat", "data: {\"type\":\"text\",\"text\":\"ok\"}"] },
+      "expected": { "eventCount": 1, "types": ["text"] }
+    }
+  ]
+}

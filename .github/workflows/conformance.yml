@@ -1,0 +1,106 @@
+name: Conformance (DSH Zig Port)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  ZIG_VERSION: 0.17.0
+  DSH_TELEMETRY_DISABLED: '1'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  conformance-node:
+    name: Conformance vs Node reference
+    runs-on: ubuntu-24.04
+    # Validates the conformance harness itself: every golden fixture extracted
+    # from the Node reference must reproduce when the runner re-executes the
+    # same scenario against the same reference. This is the baseline N/N before
+    # any Zig port code exists; once the port is built, the zig job below
+    # becomes the real gate.
+    steps:
+      - name: Checkout dsh-zig (port workspace + original reference)
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: 'pnpm'
+
+      - name: Install Zig ${{ env.ZIG_VERSION }}
+        uses: actions/setup-zig@v1
+        with:
+          version: ${{ env.ZIG_VERSION }}
+
+      - name: Verify Zig
+        run: zig version
+
+      - name: Install reference dependencies
+        run: pnpm install --frozen-lockfile
+        working-directory: ./original
+
+      - name: Extract golden fixtures from Node reference (baseline)
+        run: tsx conformance/extract-fixtures.mjs
+        working-directory: ./
+
+      - name: Run differential conformance vs Node reference
+        run: tsx conformance/run-differential.mjs node
+        working-directory: ./
+
+  conformance-zig:
+    name: Conformance vs Zig port
+    runs-on: ubuntu-24.04
+    needs: conformance-node
+    if: always()
+    # The real gate: once the Zig port implements a scenario target, its
+    # output must match the golden fixtures from the Node reference. Until
+    # the port target exists, this job reports the port as not-yet-implemented
+    # (exit 0, no failures) rather than blocking progress.
+    steps:
+      - name: Checkout dsh-zig (port workspace + original reference)
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: 'pnpm'
+
+      - name: Install Zig ${{ env.ZIG_VERSION }}
+        uses: actions/setup-zig@v1
+        with:
+          version: ${{ env.ZIG_VERSION }}
+
+      - name: Verify Zig
+        run: zig version
+
+      - name: Install reference dependencies (needed for wrapper/imports)
+        run: pnpm install --frozen-lockfile
+        working-directory: ./original
+
+      - name: Build Zig port (if build.zig exists)
+        run: |
+          if [ -f build.zig ]; then zig build; else echo "No build.zig yet — port not started; skipping."; fi
+
+      - name: Run differential conformance vs Zig port
+        run: |
+          if [ -f conformance/zig-target.mjs ]; then
+            tsx conformance/run-differential.mjs zig
+          else
+            echo "No zig-target.mjs yet — port target not implemented; skipping."
+          fi

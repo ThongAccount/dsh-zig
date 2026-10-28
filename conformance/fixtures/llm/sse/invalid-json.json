@@ -1,0 +1,5 @@
+{
+  "caseId": "llm.sse.invalid-json",
+  "ok": false,
+  "error": "DeepSeek Messages SSE contains invalid JSON"
+}

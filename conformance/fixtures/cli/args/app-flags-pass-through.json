@@ -1,0 +1,13 @@
+{
+  "caseId": "cli.args.app-flags-pass-through",
+  "ok": true,
+  "output": {
+    "mode": "profile",
+    "profile": "tui",
+    "patches": [],
+    "args": [
+      "--resume",
+      "abc"
+    ]
+  }
+}
