@@ -1148,6 +1148,8 @@ const ConformanceResult = struct {
     err: []const u8,
     exitCode: usize,
     outputIsJson: bool = false,
+    /// Force `exitCode` into the JSON even when 0 (cli.args error cases carry exit(0)).
+    emitExitCode: bool = false,
 };
 
 fn conformance(init: std.process.Init, args: []const [:0]const u8) !void {
@@ -1211,6 +1213,11 @@ fn conformance(init: std.process.Init, args: []const [:0]const u8) !void {
 
     if (parts.items.len >= 3 and std.mem.eql(u8, parts.items[0], "agent") and std.mem.eql(u8, parts.items[1], "tool-pairing")) {
         try conformanceAgentToolPairing(init, inputFile);
+        return;
+    }
+
+    if (parts.items.len >= 3 and std.mem.eql(u8, parts.items[0], "cli") and std.mem.eql(u8, parts.items[1], "args")) {
+        try conformanceCliArgs(init, inputFile);
         return;
     }
 
@@ -1956,6 +1963,249 @@ fn conformanceAgentToolPairing(init: std.process.Init, inputFile: [:0]const u8) 
     try printResult(init, .{ .ok = true, .output = output, .err = "", .exitCode = 0, .outputIsJson = true });
 }
 
+// ============================================================================
+// CLI args — launcher flag parsing (mirrors apps/cli/src/args.ts parseDshArgs)
+// Launcher flags come first and end at the first unrecognized token; everything
+// after belongs to the booted app verbatim. Errors/help/version exit in-process.
+// ============================================================================
+
+const CliParse = struct {
+    ok: bool,
+    // success output JSON (compact), only valid when ok == true
+    output: []const u8 = "",
+    // exit code for help/version/error exits, only valid when ok == false
+    exit_code: usize = 0,
+};
+
+fn cliExitResult(init: std.process.Init, code: usize) !void {
+    const errStr = try std.fmt.allocPrint(init.gpa, "exit({d})", .{code});
+    defer init.gpa.free(errStr);
+    try printResult(init, .{ .ok = false, .err = errStr, .exitCode = code, .output = "", .emitExitCode = true });
+}
+
+fn cliEmitStrArray(a: std.mem.Allocator, buf: *std.ArrayList(u8), items: []const []const u8) !void {
+    try buf.appendSlice(a, "[");
+    for (0..items.len) |i| {
+        if (i > 0) try buf.appendSlice(a, ",");
+        try buf.appendSlice(a, "\"");
+        try appendEscapedStr(a, buf, items[i]);
+        try buf.appendSlice(a, "\"");
+    }
+    try buf.appendSlice(a, "]");
+}
+
+fn cliAppendStrField(a: std.mem.Allocator, buf: *std.ArrayList(u8), key: []const u8, val: []const u8) !void {
+    try buf.appendSlice(a, "\"");
+    try appendEscapedStr(a, buf, key);
+    try buf.appendSlice(a, "\":\"");
+    try appendEscapedStr(a, buf, val);
+    try buf.appendSlice(a, "\"");
+}
+
+fn conformanceCliArgs(init: std.process.Init, inputFile: [:0]const u8) !void {
+    const cwd_dir = std.Io.Dir.cwd();
+    const file = try cwd_dir.readFileAlloc(init.io, inputFile, init.gpa, .unlimited);
+    defer init.gpa.free(file);
+
+    var parser = JsonParser{ .s = file, .a = init.gpa };
+    const input = try jsonParseValue(&parser);
+    if (input.typ != .obj) return error.ExpectedObject;
+
+    const argvJv = jsonObjGet(input, "argv") orelse return error.MissingArgv;
+    if (argvJv.typ != .arr) return error.ExpectedArray;
+
+    var argv = try std.ArrayList([]const u8).initCapacity(init.gpa, argvJv.arr.len);
+    defer argv.deinit(init.gpa);
+    for (argvJv.arr) |item| {
+        if (item.typ == .str) try argv.append(init.gpa, item.str);
+    }
+    const tokens = argv.items;
+
+    // `dsh plugin ...` dispatches to the plugin subcommand.
+    if (tokens.len > 0 and std.mem.eql(u8, tokens[0], "plugin")) {
+        try cliParsePlugin(init, tokens[1..]);
+        return;
+    }
+
+    // `dsh <name>` abbreviates `dsh --profile <name>`: a leading bare token that
+    // is not an option and not "plugin" is expanded to --profile.
+    var expanded = try std.ArrayList([]const u8).initCapacity(init.gpa, tokens.len + 1);
+    defer expanded.deinit(init.gpa);
+    if (tokens.len > 0 and tokens[0].len > 0 and tokens[0][0] != '-') {
+        try expanded.append(init.gpa, "--profile");
+        for (tokens) |t| try expanded.append(init.gpa, t);
+    } else {
+        for (tokens) |t| try expanded.append(init.gpa, t);
+    }
+    try cliParseMain(init, expanded.items);
+}
+
+fn cliParseMain(init: std.process.Init, tokens: []const []const u8) !void {
+    var profile: ?[]const u8 = null;
+    var fromDefault: ?[]const u8 = null;
+    var patches = try std.ArrayList([]const u8).initCapacity(init.gpa, 4);
+    defer patches.deinit(init.gpa);
+    var dumpConfig = false;
+    var dumpDefault = false;
+    var dumpSchema = false;
+
+    var args: []const []const u8 = &.{};
+    var i: usize = 0;
+    while (i < tokens.len) {
+        const tok = tokens[i];
+        if (std.mem.eql(u8, tok, "--profile")) {
+            if (profile != null) return cliExitResult(init, 1); // select a profile only once
+            if (i + 1 >= tokens.len) return cliExitResult(init, 1);
+            profile = tokens[i + 1];
+            i += 2;
+        } else if (std.mem.eql(u8, tok, "--from-default-profile")) {
+            if (i + 1 >= tokens.len) return cliExitResult(init, 1);
+            fromDefault = tokens[i + 1];
+            i += 2;
+        } else if (std.mem.eql(u8, tok, "--patch")) {
+            if (i + 1 >= tokens.len) return cliExitResult(init, 1);
+            try patches.append(init.gpa, tokens[i + 1]);
+            i += 2;
+        } else if (std.mem.eql(u8, tok, "--dump-config")) {
+            dumpConfig = true;
+            i += 1;
+        } else if (std.mem.eql(u8, tok, "--dump-default-config")) {
+            dumpDefault = true;
+            i += 1;
+        } else if (std.mem.eql(u8, tok, "--dump-config-schema")) {
+            dumpSchema = true;
+            i += 1;
+        } else if (std.mem.eql(u8, tok, "-V") or std.mem.eql(u8, tok, "--version")) {
+            return cliExitResult(init, 0); // version prints and exits 0
+        } else {
+            // First unrecognized token: it and everything after belong to the app.
+            args = tokens[i..];
+            break;
+        }
+    }
+
+    // action: no profile selected.
+    if (profile == null) {
+        for (args) |a| {
+            if (std.mem.eql(u8, a, "-h") or std.mem.eql(u8, a, "--help")) return cliExitResult(init, 0);
+        }
+        return cliExitResult(init, 1); // --profile <name> is required
+    }
+    const p = profile.?;
+    if (p.len == 0) return cliExitResult(init, 1); // --profile needs a name
+    if (std.ascii.eqlIgnoreCase(p, "desktop")) return cliExitResult(init, 1); // reserved for Electron
+
+    // resolveBoot
+    for (patches.items) |pt| {
+        if (pt.len == 0) return cliExitResult(init, 1); // --patch needs a path
+    }
+    if (fromDefault) |fd| {
+        if (fd.len == 0) return cliExitResult(init, 1); // --from-default-profile needs a name
+    }
+    var dumpCount: usize = 0;
+    if (dumpConfig) dumpCount += 1;
+    if (dumpDefault) dumpCount += 1;
+    if (dumpSchema) dumpCount += 1;
+
+    var out = try std.ArrayList(u8).initCapacity(init.gpa, 128);
+    defer out.deinit(init.gpa);
+
+    if (dumpCount == 0) {
+        // profile mode
+        try out.appendSlice(init.gpa, "{\"mode\":\"profile\",\"profile\":");
+        try out.appendSlice(init.gpa, "\"");
+        try appendEscapedStr(init.gpa, &out, p);
+        try out.appendSlice(init.gpa, "\"");
+        if (fromDefault) |fd| {
+            try out.appendSlice(init.gpa, ",\"fromDefaultProfile\":\"");
+            try appendEscapedStr(init.gpa, &out, fd);
+            try out.appendSlice(init.gpa, "\"");
+        }
+        try out.appendSlice(init.gpa, ",\"patches\":");
+        try cliEmitStrArray(init.gpa, &out, patches.items);
+        try out.appendSlice(init.gpa, ",\"args\":");
+        try cliEmitStrArray(init.gpa, &out, args);
+        try out.appendSlice(init.gpa, "}");
+    } else if (dumpCount > 1) {
+        return cliExitResult(init, 1); // mutually exclusive dump flags
+    } else {
+        if (args.len > 0) return cliExitResult(init, 1); // config dumps take no app arguments
+        if (dumpSchema) {
+            try out.appendSlice(init.gpa, "{\"mode\":\"dump-config-schema\",\"profile\":\"");
+            try appendEscapedStr(init.gpa, &out, p);
+            try out.appendSlice(init.gpa, "\"");
+            if (fromDefault) |fd| {
+                try out.appendSlice(init.gpa, ",\"fromDefaultProfile\":\"");
+                try appendEscapedStr(init.gpa, &out, fd);
+                try out.appendSlice(init.gpa, "\"");
+            }
+            try out.appendSlice(init.gpa, ",\"patches\":");
+            try cliEmitStrArray(init.gpa, &out, patches.items);
+            try out.appendSlice(init.gpa, "}");
+        } else {
+            const defaultOnly = dumpDefault;
+            if (defaultOnly and patches.items.len > 0) return cliExitResult(init, 1); // takes no --patch
+            try out.appendSlice(init.gpa, "{\"mode\":\"dump-config\",\"profile\":\"");
+            try appendEscapedStr(init.gpa, &out, p);
+            try out.appendSlice(init.gpa, "\"");
+            if (fromDefault) |fd| {
+                try out.appendSlice(init.gpa, ",\"fromDefaultProfile\":\"");
+                try appendEscapedStr(init.gpa, &out, fd);
+                try out.appendSlice(init.gpa, "\"");
+            }
+            try out.appendSlice(init.gpa, ",\"defaultOnly\":");
+            if (defaultOnly) {
+                try out.appendSlice(init.gpa, "true");
+            } else {
+                try out.appendSlice(init.gpa, "false");
+            }
+            try out.appendSlice(init.gpa, ",\"patches\":");
+            try cliEmitStrArray(init.gpa, &out, patches.items);
+            try out.appendSlice(init.gpa, "}");
+        }
+    }
+
+    const output = try out.toOwnedSlice(init.gpa);
+    defer init.gpa.free(output);
+    try printResult(init, .{ .ok = true, .output = output, .err = "", .exitCode = 0, .outputIsJson = true });
+}
+
+fn cliParsePlugin(init: std.process.Init, tokens: []const []const u8) !void {
+    var profile: ?[]const u8 = null;
+    var args: []const []const u8 = &.{};
+    var i: usize = 0;
+    while (i < tokens.len) {
+        const tok = tokens[i];
+        if (std.mem.eql(u8, tok, "--profile")) {
+            if (profile != null) return cliExitResult(init, 1);
+            if (i + 1 >= tokens.len) return cliExitResult(init, 1);
+            profile = tokens[i + 1];
+            i += 2;
+        } else {
+            args = tokens[i..];
+            break;
+        }
+    }
+    // requiredOption --profile
+    if (profile == null) return cliExitResult(init, 1);
+    const p = profile.?;
+    if (p.len == 0) return cliExitResult(init, 1); // --profile needs a name
+    if (std.ascii.eqlIgnoreCase(p, "desktop")) return cliExitResult(init, 1); // reserved (manageDesktopProfile=false)
+    if (args.len == 0) return cliExitResult(init, 1); // plugin needs pnpm arguments
+
+    var out = try std.ArrayList(u8).initCapacity(init.gpa, 64);
+    defer out.deinit(init.gpa);
+    try out.appendSlice(init.gpa, "{\"mode\":\"plugin\",\"profile\":\"");
+    try appendEscapedStr(init.gpa, &out, p);
+    try out.appendSlice(init.gpa, "\",\"args\":");
+    try cliEmitStrArray(init.gpa, &out, args);
+    try out.appendSlice(init.gpa, "}");
+
+    const output = try out.toOwnedSlice(init.gpa);
+    defer init.gpa.free(output);
+    try printResult(init, .{ .ok = true, .output = output, .err = "", .exitCode = 0, .outputIsJson = true });
+}
+
 fn appendEscapedStr(a: std.mem.Allocator, buf: *std.ArrayList(u8), s: []const u8) !void {
     var i: usize = 0;
     while (i < s.len) {
@@ -2112,7 +2362,7 @@ fn buildJson(allocator: std.mem.Allocator, result: ConformanceResult) ![]const u
             try appendEscaped(allocator, &parts, result.err);
             try parts.append(allocator, "\"");
         }
-        if (result.exitCode != 0) {
+        if (result.exitCode != 0 or result.emitExitCode) {
             try parts.append(allocator, ",\"exitCode\":");
             var numBuf: [20]u8 = undefined;
             const numStr = try std.fmt.bufPrint(numBuf[0..], "{d}", .{result.exitCode});

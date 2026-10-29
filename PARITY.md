@@ -25,22 +25,22 @@ Zig port matches them. Updated by Toolsmith as slices land.
 
 | Area | Scenario | Reference | Zig port | Status |
 |---|---|---|---|---|
-| CLI args | `cli.args.profile-shorthand` | PASS | | covered |
-| CLI args | `cli.args.profile-with-patches` | PASS | | covered |
-| CLI args | `cli.args.from-default-profile` | PASS | | covered |
-| CLI args | `cli.args.app-flags-pass-through` | PASS | | covered |
-| CLI args | `cli.args.web-help-passthrough` | PASS | | covered |
-| CLI args | `cli.args.headless-positional` | PASS | | covered |
-| CLI args | `cli.args.late-patch-belongs-to-app` | PASS | | covered |
-| CLI args | `cli.args.dump-config` | PASS | | covered |
-| CLI args | `cli.args.dump-default-config` | PASS | | covered |
-| CLI args | `cli.args.dump-config-schema` | PASS | | covered |
-| CLI args | `cli.args.plugin-forwarding` | PASS | | covered |
-| CLI args | `cli.args.version-flag` | PASS (exit 0) | | covered |
-| CLI args | `cli.args.reject-missing-profile` | PASS (exit 1) | | covered |
-| CLI args | `cli.args.reject-competing-dumps` | PASS (exit 1) | | covered |
-| CLI args | `cli.args.reject-desktop-profile` | PASS (exit 1) | | covered |
-| CLI args | `cli.args.help-flag` | PASS (exit 0) | | covered |
+| CLI args | `cli.args.profile-shorthand` | PASS | PASS | implemented |
+| CLI args | `cli.args.profile-with-patches` | PASS | PASS | implemented |
+| CLI args | `cli.args.from-default-profile` | PASS | PASS | implemented |
+| CLI args | `cli.args.app-flags-pass-through` | PASS | PASS | implemented |
+| CLI args | `cli.args.web-help-passthrough` | PASS | PASS | implemented |
+| CLI args | `cli.args.headless-positional` | PASS | PASS | implemented |
+| CLI args | `cli.args.late-patch-belongs-to-app` | PASS | PASS | implemented |
+| CLI args | `cli.args.dump-config` | PASS | PASS | implemented |
+| CLI args | `cli.args.dump-default-config` | PASS | PASS | implemented |
+| CLI args | `cli.args.dump-config-schema` | PASS | PASS | implemented |
+| CLI args | `cli.args.plugin-forwarding` | PASS | PASS | implemented |
+| CLI args | `cli.args.version-flag` | PASS (exit 0) | PASS | implemented |
+| CLI args | `cli.args.reject-missing-profile` | PASS (exit 1) | PASS | implemented |
+| CLI args | `cli.args.reject-competing-dumps` | PASS (exit 1) | PASS | implemented |
+| CLI args | `cli.args.reject-desktop-profile` | PASS (exit 1) | PASS | implemented |
+| CLI args | `cli.args.help-flag` | PASS (exit 0) | PASS | implemented |
 | Config patch layering | `config.patch-layering.compose-layers-in-order` | PASS | PASS | implemented |
 | Config patch layering | `config.patch-layering.js-expr-verbatim` | PASS | PASS | implemented |
 | Config patch layering | `config.patch-layering.source-separators` | PASS | PASS | implemented |
@@ -96,7 +96,8 @@ Zig port matches them. Updated by Toolsmith as slices land.
 
 **Baseline: 32 pass, 15 expected-error cases. Total: 47 scenarios.**
 **Slice 6 web server: +21 scenarios (route 5, upgrade 3, gzip 4, host 3, auth 3, static 2, index-injections 1). New total: 68 scenarios.**
-**Zig port: 52/68 implemented (slice 1 config: load + apply, patch-layering; slice 2 session: jsonl header format; slice 3 LLM: SSE event parsing + retry/backoff/error paths; slice 4 tool runtime: shell command execution via spawn; slice 5 agent loop: tool-call/result pairing balance at surface cuts; slice 6 web server: route select/dup, upgrade select/dup, gzip decision, host check, basic auth, static resolve + traversal, index-injections render). Remaining: cli.args (16 scenarios, last slice per mission order).**
+**Slice 7 CLI args: +16 scenarios (profile boot, --patch, --from-default-profile, dump modes, plugin forwarding, version/help exit 0, missing-profile/competing-dumps/desktop reject exit 1, app-arg pass-through boundary).**
+**Zig port: 68/68 implemented — FULL PARITY.** `tsx conformance/run-differential.mjs zig` → `68/68 match, 0 mismatch, 0 runner errors`. All slices complete per mission order: config, session JSONL, LLM SSE/retry, tool shell, agent tool-pairing, web server, CLI args.
 
 ## Adding a scenario
 
