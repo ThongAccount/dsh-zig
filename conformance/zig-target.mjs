@@ -39,7 +39,10 @@ const CONFORMANCE_DIR = dirname(SELF)
 const REPO_ROOT = join(CONFORMANCE_DIR, '..')
 const SCENARIOS_DIR = join(CONFORMANCE_DIR, 'scenarios')
 
-const ZIG = process.env.DSH_ZIG || '/workspace/tools/bin/zig'
+const DEFAULT_ZIG = '/workspace/tools/bin/zig'
+// Local dev uses the pinned toolchain under /workspace/tools; CI (setup-zig)
+// puts `zig` on PATH, so fall back to PATH when the pinned path is absent.
+const ZIG = process.env.DSH_ZIG || (existsSync(DEFAULT_ZIG) ? DEFAULT_ZIG : 'zig')
 // Candidate locations for the port binary (SysLead names it in build.zig).
 const BINARY_CANDIDATES = process.env.DSH_BIN
   ? [process.env.DSH_BIN]

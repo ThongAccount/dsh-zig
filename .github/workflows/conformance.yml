@@ -52,11 +52,11 @@ jobs:
         working-directory: ./original
 
       - name: Extract golden fixtures from Node reference (baseline)
-        run: tsx conformance/extract-fixtures.mjs
+        run: node original/node_modules/tsx/dist/cli.mjs conformance/extract-fixtures.mjs
         working-directory: ./
 
       - name: Run differential conformance vs Node reference
-        run: tsx conformance/run-differential.mjs node
+        run: node original/node_modules/tsx/dist/cli.mjs conformance/run-differential.mjs node
         working-directory: ./
 
   conformance-zig:
@@ -100,7 +100,7 @@ jobs:
       - name: Run differential conformance vs Zig port
         run: |
           if [ -f conformance/zig-target.mjs ]; then
-            tsx conformance/run-differential.mjs zig
+            node original/node_modules/tsx/dist/cli.mjs conformance/run-differential.mjs zig
           else
             echo "No zig-target.mjs yet — port target not implemented; skipping."
           fi
