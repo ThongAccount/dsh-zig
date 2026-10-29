@@ -1,0 +1,6 @@
+{
+  "caseId": "web.route.dup-throws",
+  "ok": false,
+  "error": "webserver: duplicate exact route \"/probe\"",
+  "exitCode": 1
+}

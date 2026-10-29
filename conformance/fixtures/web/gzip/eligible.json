@@ -1,0 +1,7 @@
+{
+  "caseId": "web.gzip.eligible",
+  "ok": true,
+  "output": {
+    "encoding": "gzip"
+  }
+}

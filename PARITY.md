@@ -66,9 +66,37 @@ Zig port matches them. Updated by Toolsmith as slices land.
 | Tool shell | `tool.shell.stderr` | PASS | PASS | implemented |
 | Tool shell | `tool.shell.stdout-stderr` | PASS | PASS | implemented |
 | Tool shell | `tool.shell.empty-output` | PASS | PASS | implemented |
+| Agent tool pairing | `agent.tool-pairing.closed-step-balanced` | PASS | PASS | implemented |
+| Agent tool pairing | `agent.tool-pairing.open-call-unbalanced` | PASS | PASS | implemented |
+| Agent tool pairing | `agent.tool-pairing.multiple-calls-require-all-results` | PASS | PASS | implemented |
+| Agent tool pairing | `agent.tool-pairing.neutral-node-crosses-open-pair` | PASS | PASS | implemented |
+| Agent tool pairing | `agent.tool-pairing.missing-seq-throws` | PASS | PASS | implemented |
+| Agent tool pairing | `agent.tool-pairing.orphan-result-throws` | PASS | PASS | implemented |
+| Web server route | `web.route.select-exact-wins` | PASS | PASS | implemented |
+| Web server route | `web.route.select-longest-prefix-wins` | PASS | PASS | implemented |
+| Web server route | `web.route.select-prefix-own-path` | PASS | PASS | implemented |
+| Web server route | `web.route.select-fallback-404` | PASS | PASS | implemented |
+| Web server route | `web.route.dup-throws` | PASS (exit 1) | PASS | implemented |
+| Web server upgrade | `web.upgrade.select` | PASS | PASS | implemented |
+| Web server upgrade | `web.upgrade.select-miss` | PASS | PASS | implemented |
+| Web server upgrade | `web.upgrade.dup-throws` | PASS (exit 1) | PASS | implemented |
+| Web server gzip | `web.gzip.eligible` | PASS | PASS | implemented |
+| Web server gzip | `web.gzip.below-threshold` | PASS | PASS | implemented |
+| Web server gzip | `web.gzip.event-stream-never` | PASS | PASS | implemented |
+| Web server gzip | `web.gzip.no-accept-encoding` | PASS | PASS | implemented |
+| Web server host | `web.host.check-allowed` | PASS | PASS | implemented |
+| Web server host | `web.host.check-rejected` | PASS | PASS | implemented |
+| Web server host | `web.host.check-zero-port-form` | PASS | PASS | implemented |
+| Web server auth | `web.auth.basic-ok` | PASS | PASS | implemented |
+| Web server auth | `web.auth.basic-wrong` | PASS (exit 1) | PASS | implemented |
+| Web server auth | `web.auth.basic-missing` | PASS (exit 1) | PASS | implemented |
+| Web server static | `web.static.resolve` | PASS | PASS | implemented |
+| Web server static | `web.static.traversal-rejected` | PASS (exit 1) | PASS | implemented |
+| Web server index-injections | `web.index-injections.render` | PASS | PASS | implemented |
 
-**Baseline: 32 pass, 9 expected-error cases. Total: 41 scenarios.**
-**Zig port: 25/41 implemented (slice 1 config: load + apply, patch-layering; slice 2 session: jsonl header format; slice 3 LLM: SSE event parsing + retry/backoff/error paths; slice 4 tool runtime: shell command execution via spawn). Remaining: cli.args (16 scenarios, last slice per mission order).**
+**Baseline: 32 pass, 15 expected-error cases. Total: 47 scenarios.**
+**Slice 6 web server: +21 scenarios (route 5, upgrade 3, gzip 4, host 3, auth 3, static 2, index-injections 1). New total: 68 scenarios.**
+**Zig port: 52/68 implemented (slice 1 config: load + apply, patch-layering; slice 2 session: jsonl header format; slice 3 LLM: SSE event parsing + retry/backoff/error paths; slice 4 tool runtime: shell command execution via spawn; slice 5 agent loop: tool-call/result pairing balance at surface cuts; slice 6 web server: route select/dup, upgrade select/dup, gzip decision, host check, basic auth, static resolve + traversal, index-injections render). Remaining: cli.args (16 scenarios, last slice per mission order).**
 
 ## Adding a scenario
 

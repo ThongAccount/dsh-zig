@@ -1,0 +1,6 @@
+{
+  "caseId": "web.auth.basic-wrong",
+  "ok": false,
+  "error": "unauthorized",
+  "exitCode": 401
+}

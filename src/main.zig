@@ -1209,6 +1209,16 @@ fn conformance(init: std.process.Init, args: []const [:0]const u8) !void {
         return;
     }
 
+    if (parts.items.len >= 3 and std.mem.eql(u8, parts.items[0], "agent") and std.mem.eql(u8, parts.items[1], "tool-pairing")) {
+        try conformanceAgentToolPairing(init, inputFile);
+        return;
+    }
+
+    if (parts.items.len >= 2 and std.mem.eql(u8, parts.items[0], "web")) {
+        try conformanceWebServer(init, inputFile);
+        return;
+    }
+
     const unknownMsg = try std.fmt.allocPrint(init.gpa, "unknown scenario: {s}", .{scenarioId});
     defer init.gpa.free(unknownMsg);
     try printResult(init, .{
@@ -1778,6 +1788,174 @@ fn conformanceToolShell(init: std.process.Init, inputFile: [:0]const u8) !void {
     try printResult(init, .{ .ok = true, .output = output, .err = "", .exitCode = 0, .outputIsJson = true });
 }
 
+// ============================================================================
+// Agent loop — tool-history pairing (turn boundaries for compaction safe cuts)
+// Mirrors @deepseek-ai/dsh-compaction's toolPairingBalancedBefore/After.
+// ============================================================================
+
+fn eventDelta(ev: JsonValue) i32 {
+    if (ev.typ != .obj) return 0;
+    const typeJv = jsonObjGet(ev, "type");
+    if (typeJv) |tj| {
+        if (tj.typ == .str) {
+            if (std.mem.eql(u8, tj.str, "assistant/message")) {
+                var count: i32 = 0;
+                const dataJv = jsonObjGet(ev, "data");
+                if (dataJv) |dj| {
+                    if (dj.typ == .obj) {
+                        const msgJv = jsonObjGet(dj, "message");
+                        if (msgJv) |mj| {
+                            if (mj.typ == .obj) {
+                                const contentJv = jsonObjGet(mj, "content");
+                                if (contentJv) |cj| {
+                                    if (cj.typ == .arr) {
+                                        for (cj.arr) |block| {
+                                            if (block.typ != .obj) continue;
+                                            const bt = jsonObjGet(block, "type");
+                                            if (bt) |bts| {
+                                                if (bts.typ == .str and std.mem.eql(u8, bts.str, "tool-call")) {
+                                                    count += 1;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                return count;
+            }
+            if (std.mem.eql(u8, tj.str, "tool/result")) {
+                return -1;
+            }
+        }
+    }
+    return 0;
+}
+
+fn findSeqPosition(seqs: []const usize, seq: usize) ?usize {
+    for (0..seqs.len) |i| {
+        if (seqs[i] == seq) return i;
+    }
+    return null;
+}
+
+fn conformanceAgentToolPairing(init: std.process.Init, inputFile: [:0]const u8) !void {
+    const cwd_dir = std.Io.Dir.cwd();
+    const file = try cwd_dir.readFileAlloc(init.io, inputFile, init.gpa, .unlimited);
+    defer init.gpa.free(file);
+
+    var parser = JsonParser{ .s = file, .a = init.gpa };
+    const input = try jsonParseValue(&parser);
+    if (input.typ != .obj) return error.ExpectedObject;
+
+    const surfaceNodesJv = jsonObjGet(input, "surfaceNodes") orelse return error.MissingArgv;
+    const eventsJv = jsonObjGet(input, "events") orelse return error.MissingArgv;
+    const queriesJv = jsonObjGet(input, "queries") orelse return error.MissingArgv;
+    if (surfaceNodesJv.typ != .arr or eventsJv.typ != .arr or queriesJv.typ != .arr)
+        return error.ExpectedArray;
+
+    var surfaceSeqs = try std.ArrayList(usize).initCapacity(init.gpa, surfaceNodesJv.arr.len);
+    defer surfaceSeqs.deinit(init.gpa);
+    var surfaceEvents = try std.ArrayList(JsonValue).initCapacity(init.gpa, eventsJv.arr.len);
+    defer surfaceEvents.deinit(init.gpa);
+
+    for (surfaceNodesJv.arr) |sn| {
+        if (sn.typ == .num) try surfaceSeqs.append(init.gpa, @as(usize, @intFromFloat(sn.num)));
+    }
+    for (eventsJv.arr) |ev| {
+        try surfaceEvents.append(init.gpa, ev);
+    }
+
+    // Fold the surface: cutBalanced[k] = cut before surface position k is balanced.
+    // cutBalanced[0] = true (cut before the first node, always balanced).
+    var cutBalanced = try std.ArrayList(bool).initCapacity(init.gpa, surfaceSeqs.items.len + 1);
+    defer cutBalanced.deinit(init.gpa);
+    try cutBalanced.append(init.gpa, true);
+
+    var foldErr: ?[]const u8 = null;
+    var hasFoldErr = false;
+    var inProgress: i32 = 0;
+    for (0..surfaceSeqs.items.len) |i| {
+        const seq = surfaceSeqs.items[i];
+        const ev = surfaceEvents.items[i];
+        const evSeqJv = jsonObjGet(ev, "seq");
+        if (evSeqJv) |esj| {
+            if (esj.typ == .num and @as(usize, @intFromFloat(esj.num)) != seq) {
+                foldErr = try std.fmt.allocPrint(init.gpa, "tool-pairing balance: surface seq {d} has no matching session event", .{seq});
+                hasFoldErr = true;
+                break;
+            }
+        }
+        inProgress += eventDelta(ev);
+        if (inProgress < 0) {
+            foldErr = try std.fmt.allocPrint(init.gpa, "tool-pairing balance: tool/result at surface seq {d} has no matching tool-call (corrupt surface)", .{seq});
+            hasFoldErr = true;
+            break;
+        }
+        try cutBalanced.append(init.gpa, inProgress == 0);
+    }
+
+    // Emit one result object per query. A fold error applies to every query.
+    var out = try std.ArrayList(u8).initCapacity(init.gpa, 64 * queriesJv.arr.len);
+    defer out.deinit(init.gpa);
+    try out.appendSlice(init.gpa, "[");
+    for (0..queriesJv.arr.len) |qi| {
+        if (qi > 0) try out.appendSlice(init.gpa, ",");
+        const q = queriesJv.arr[qi];
+        if (hasFoldErr) {
+            try out.appendSlice(init.gpa, "{\"error\":\"");
+            try appendEscapedStr(init.gpa, &out, foldErr.?);
+            try out.appendSlice(init.gpa, "\"}");
+            continue;
+        }
+        if (q.typ != .obj) {
+            try out.appendSlice(init.gpa, "{\"error\":\"malformed query\"}");
+            continue;
+        }
+        const qseqJv = jsonObjGet(q, "seq");
+        const qkindJv = jsonObjGet(q, "kind");
+        var seq: ?usize = null;
+        if (qseqJv) |sj| { if (sj.typ == .num) seq = @as(usize, @intFromFloat(sj.num)); }
+        var kind: []const u8 = "";
+        if (qkindJv) |kj| { if (kj.typ == .str) kind = kj.str; }
+
+        if (seq) |s| {
+            const pos = findSeqPosition(surfaceSeqs.items, s);
+            if (pos) |p| {
+                var balanced: bool = false;
+                if (std.mem.eql(u8, kind, "before")) {
+                    balanced = cutBalanced.items[p];
+                } else if (std.mem.eql(u8, kind, "after")) {
+                    balanced = cutBalanced.items[p + 1];
+                }
+                try out.appendSlice(init.gpa, "{\"balanced\":");
+                if (balanced) {
+                    try out.appendSlice(init.gpa, "true");
+                } else {
+                    try out.appendSlice(init.gpa, "false");
+                }
+                try out.appendSlice(init.gpa, "}");
+            } else {
+                const msg = try std.fmt.allocPrint(init.gpa, "tool-pairing balance: surface seq {d} not found", .{s});
+                defer init.gpa.free(msg);
+                try out.appendSlice(init.gpa, "{\"error\":\"");
+                try appendEscapedStr(init.gpa, &out, msg);
+                try out.appendSlice(init.gpa, "\"}");
+            }
+        } else {
+            try out.appendSlice(init.gpa, "{\"error\":\"tool-pairing balance: missing seq\"}");
+        }
+    }
+    try out.appendSlice(init.gpa, "]");
+    if (foldErr) |feb| init.gpa.free(feb);
+
+    const output = try out.toOwnedSlice(init.gpa);
+    defer init.gpa.free(output);
+    try printResult(init, .{ .ok = true, .output = output, .err = "", .exitCode = 0, .outputIsJson = true });
+}
+
 fn appendEscapedStr(a: std.mem.Allocator, buf: *std.ArrayList(u8), s: []const u8) !void {
     var i: usize = 0;
     while (i < s.len) {
@@ -1936,9 +2114,9 @@ fn buildJson(allocator: std.mem.Allocator, result: ConformanceResult) ![]const u
         }
         if (result.exitCode != 0) {
             try parts.append(allocator, ",\"exitCode\":");
-            const exitCodeStr = try std.fmt.allocPrint(allocator, "{d}", .{result.exitCode});
-            defer allocator.free(exitCodeStr);
-            try parts.append(allocator, exitCodeStr);
+            var numBuf: [20]u8 = undefined;
+            const numStr = try std.fmt.bufPrint(numBuf[0..], "{d}", .{result.exitCode});
+            try parts.append(allocator, numStr);
         }
     }
     try parts.append(allocator, "}");
@@ -1966,4 +2144,519 @@ fn appendEscaped(allocator: std.mem.Allocator, parts: *std.ArrayList([]const u8)
         }
         i += 1;
     }
+}
+
+// ============================================================================
+// Web server — slice 6 (dsh-v0.2.0-rc.2, @deepseek-ai/dsh-host-webserver subset)
+// ============================================================================
+
+fn hex4(c: u8) ?u4 {
+    if (c >= '0' and c <= '9') return @as(u4, @intCast(c - '0'));
+    if (c >= 'a' and c <= 'f') return @as(u4, @intCast(c - 'a' + 10));
+    if (c >= 'A' and c <= 'F') return @as(u4, @intCast(c - 'A' + 10));
+    return null;
+}
+
+/// Percent-decode `s` into a freshly allocated slice (caller frees).
+fn percentDecode(a: std.mem.Allocator, s: []const u8) ![]const u8 {
+    var out = try std.ArrayList(u8).initCapacity(a, s.len);
+    var i: usize = 0;
+    while (i < s.len) {
+        if (s[i] == '%' and i + 2 < s.len) {
+            const hi = hex4(s[i + 1]);
+            const lo = hex4(s[i + 2]);
+            if (hi != null and lo != null) {
+                const v = @as(u16, hi.?) * 16 + @as(u16, lo.?);
+                try out.append(a, @intCast(v));
+                i += 3;
+                continue;
+            }
+        }
+        try out.append(a, s[i]);
+        i += 1;
+    }
+    return try out.toOwnedSlice(a);
+}
+
+fn matchCI(s: []const u8, prefix: []const u8) bool {
+    if (s.len < prefix.len) return false;
+    var i: usize = 0;
+    while (i < prefix.len) {
+        if (std.ascii.toLower(s[i]) != std.ascii.toLower(prefix[i])) return false;
+        i += 1;
+    }
+    return true;
+}
+
+/// Index of the char just past the closing '>' of an open tag like `<head`.
+/// Case-insensitive on the tag name. Returns null when the tag is absent.
+fn findOpenTag(html: []const u8, name: []const u8) ?usize {
+    var i: usize = 0;
+    while (i + 1 + name.len <= html.len) {
+        if (html[i] == '<' and matchCI(html[i + 1..], name)) {
+            var j = i + 1 + name.len;
+            while (j < html.len and html[j] != '>') j += 1;
+            if (j < html.len) return j + 1;
+            return null;
+        }
+        i += 1;
+    }
+    return null;
+}
+
+fn emitJsonStr(a: std.mem.Allocator, buf: *std.ArrayList(u8), s: []const u8) !void {
+    try buf.appendSlice(a, "\"");
+    try appendEscapedStr(a, buf, s);
+    try buf.appendSlice(a, "\"");
+}
+
+fn emitJsonValue(a: std.mem.Allocator, buf: *std.ArrayList(u8), jv: JsonValue) !void {
+    switch (jv.typ) {
+        .null => try buf.appendSlice(a, "null"),
+        .bool => try buf.appendSlice(a, if (jv.bool) "true" else "false"),
+        .num => {
+            const s = try std.fmt.allocPrint(a, "{}", .{jv.num});
+            defer a.free(s);
+            try buf.appendSlice(a, s);
+        },
+        .str => try emitJsonStr(a, buf, jv.str),
+        .arr => {
+            try buf.appendSlice(a, "[");
+            for (0..jv.arr.len) |i| {
+                if (i > 0) try buf.appendSlice(a, ",");
+                try emitJsonValue(a, buf, jv.arr[i]);
+            }
+            try buf.appendSlice(a, "]");
+        },
+        .obj => {
+            try buf.appendSlice(a, "{");
+            for (0..jv.obj.len) |i| {
+                const field = jv.obj[i];
+                if (i > 0) try buf.appendSlice(a, ",");
+                try emitJsonStr(a, buf, field.key);
+                try buf.appendSlice(a, ":");
+                try emitJsonValue(a, buf, field.val);
+            }
+            try buf.appendSlice(a, "}");
+        },
+    }
+}
+
+fn emitOk(init: std.process.Init, a: std.mem.Allocator, out: *std.ArrayList(u8), outputIsJson: bool) !void {
+    const output = try out.toOwnedSlice(a);
+    defer a.free(output);
+    try printResult(init, .{
+        .ok = true,
+        .output = output,
+        .err = "",
+        .exitCode = 0,
+        .outputIsJson = outputIsJson,
+    });
+}
+
+fn emitErr(init: std.process.Init, msg: []const u8, ec: usize) !void {
+    try printResult(init, .{
+        .ok = false,
+        .output = "",
+        .err = msg,
+        .exitCode = ec,
+        .outputIsJson = false,
+    });
+}
+
+fn conformanceWebServer(init: std.process.Init, inputFile: [:0]const u8) !void {
+    const cwd_dir = std.Io.Dir.cwd();
+    const file = try cwd_dir.readFileAlloc(init.io, inputFile, init.gpa, .unlimited);
+    defer init.gpa.free(file);
+
+    var parser = JsonParser{ .s = file, .a = init.gpa };
+    const input = try jsonParseValue(&parser);
+    if (input.typ != .obj) return error.ExpectedObject;
+
+    const opJv = jsonObjGet(input, "op") orelse return error.MissingOp;
+    if (opJv.typ != .str) return error.ExpectedString;
+    const op = opJv.str;
+    const a = init.gpa;
+
+    if (std.mem.eql(u8, op, "web.route.select")) {
+        const routesJv = jsonObjGet(input, "routes") orelse return error.MissingRoutes;
+        if (routesJv.typ != .arr) return error.ExpectedArray;
+        const pathnameJv = jsonObjGet(input, "pathname") orelse return error.MissingPathname;
+        if (pathnameJv.typ != .str) return error.ExpectedString;
+        const pathname = pathnameJv.str;
+
+        var exactMatched: ?[]const u8 = null;
+        var bestPrefix: ?[]const u8 = null;
+        var bestPrefixLen: usize = 0;
+        for (routesJv.arr) |routeJv| {
+            if (routeJv.typ != .obj) continue;
+            const kindJv = jsonObjGet(routeJv, "kind") orelse continue;
+            const pathJv = jsonObjGet(routeJv, "path") orelse continue;
+            if (kindJv.typ != .str or pathJv.typ != .str) continue;
+            if (std.mem.eql(u8, kindJv.str, "exact")) {
+                if (std.mem.eql(u8, pathname, pathJv.str)) exactMatched = pathJv.str;
+            } else if (std.mem.eql(u8, kindJv.str, "prefix")) {
+                const p = pathJv.str;
+                var matches = false;
+                if (pathname.len == p.len) {
+                    matches = std.mem.eql(u8, pathname, p);
+                } else if (pathname.len > p.len and pathname[p.len] == '/') {
+                    matches = std.mem.eql(u8, pathname[0..p.len], p);
+                }
+                if (matches and (bestPrefix == null or p.len > bestPrefixLen)) {
+                    bestPrefix = p;
+                    bestPrefixLen = p.len;
+                }
+            }
+        }
+
+        var out = try std.ArrayList(u8).initCapacity(a, 64);
+        defer out.deinit(a);
+        try out.appendSlice(a, "{\"matched\":");
+        if (exactMatched) |m| {
+            try out.appendSlice(a, "{\"kind\":\"exact\",\"path\":");
+            try emitJsonStr(a, &out, m);
+            try out.appendSlice(a, "}");
+        } else if (bestPrefix) |p| {
+            try out.appendSlice(a, "{\"kind\":\"prefix\",\"path\":");
+            try emitJsonStr(a, &out, p);
+            try out.appendSlice(a, "}");
+        } else {
+            try out.appendSlice(a, "null");
+        }
+        try out.appendSlice(a, "}");
+        try emitOk(init, a, &out, true);
+        return;
+    }
+
+    if (std.mem.eql(u8, op, "web.route.dup-throws")) {
+        const routesJv = jsonObjGet(input, "routes") orelse return error.MissingRoutes;
+        if (routesJv.typ != .arr) return error.ExpectedArray;
+        var seen = try std.ArrayList([]const u8).initCapacity(a, routesJv.arr.len);
+        defer seen.deinit(a);
+        for (routesJv.arr) |routeJv| {
+            if (routeJv.typ != .obj) continue;
+            const pathJv = jsonObjGet(routeJv, "path") orelse continue;
+            if (pathJv.typ != .str) continue;
+            for (seen.items) |s| {
+                if (std.mem.eql(u8, s, pathJv.str)) {
+                    const msg = try std.fmt.allocPrint(a, "webserver: duplicate exact route \"{s}\"", .{pathJv.str});
+                    defer a.free(msg);
+                    return emitErr(init, msg, 1);
+                }
+            }
+            try seen.append(a, pathJv.str);
+        }
+        var empty = try std.ArrayList(u8).initCapacity(a, 0);
+        try emitOk(init, a, &empty, true);
+        return;
+    }
+
+    if (std.mem.eql(u8, op, "web.upgrade.select")) {
+        const upgradesJv = jsonObjGet(input, "upgrades") orelse return error.MissingRoutes;
+        if (upgradesJv.typ != .arr) return error.ExpectedArray;
+        const pathnameJv = jsonObjGet(input, "pathname") orelse return error.MissingPathname;
+        if (pathnameJv.typ != .str) return error.ExpectedString;
+        const pathname = pathnameJv.str;
+
+        var matched: ?[]const u8 = null;
+        for (upgradesJv.arr) |routeJv| {
+            if (routeJv.typ != .obj) continue;
+            const pathJv = jsonObjGet(routeJv, "path") orelse continue;
+            if (pathJv.typ != .str) continue;
+            if (std.mem.eql(u8, pathname, pathJv.str)) matched = pathJv.str;
+        }
+
+        var out = try std.ArrayList(u8).initCapacity(a, 64);
+        defer out.deinit(a);
+        try out.appendSlice(a, "{\"matched\":");
+        if (matched) |m| {
+            try out.appendSlice(a, "{\"path\":");
+            try emitJsonStr(a, &out, m);
+            try out.appendSlice(a, "}");
+        } else {
+            try out.appendSlice(a, "null");
+        }
+        try out.appendSlice(a, "}");
+        try emitOk(init, a, &out, true);
+        return;
+    }
+
+    if (std.mem.eql(u8, op, "web.upgrade.dup-throws")) {
+        const upgradesJv = jsonObjGet(input, "upgrades") orelse return error.MissingRoutes;
+        if (upgradesJv.typ != .arr) return error.ExpectedArray;
+        var seen = try std.ArrayList([]const u8).initCapacity(a, upgradesJv.arr.len);
+        defer seen.deinit(a);
+        for (upgradesJv.arr) |routeJv| {
+            if (routeJv.typ != .obj) continue;
+            const pathJv = jsonObjGet(routeJv, "path") orelse continue;
+            if (pathJv.typ != .str) continue;
+            for (seen.items) |s| {
+                if (std.mem.eql(u8, s, pathJv.str)) {
+                    const msg = try std.fmt.allocPrint(a, "webserver: duplicate upgrade route \"{s}\"", .{pathJv.str});
+                    defer a.free(msg);
+                    return emitErr(init, msg, 1);
+                }
+            }
+            try seen.append(a, pathJv.str);
+        }
+        var empty = try std.ArrayList(u8).initCapacity(a, 0);
+        try emitOk(init, a, &empty, true);
+        return;
+    }
+
+    if (std.mem.eql(u8, op, "web.gzip.decision")) {
+        const ctJv = jsonObjGet(input, "contentType");
+        const ct = if (ctJv) |v| (if (v.typ == .str) v.str else "") else "";
+        const clJv = jsonObjGet(input, "contentLength");
+        // contentLength is null (unknown length) or a f64; >= 1024 bytes is
+        // compressible unless it's an event stream.
+        var clOk = false;
+        if (clJv) |v| {
+            if (v.typ == .num) clOk = v.num >= 1024.0;
+        }
+        const aeJv = jsonObjGet(input, "acceptEncoding");
+        const ae = if (aeJv) |v| (if (v.typ == .str) v.str else "") else "";
+
+        var encoding: []const u8 = "identity";
+        if (!std.mem.eql(u8, ct, "text/event-stream")) {
+            if (clJv == null or clOk) {
+                var i: usize = 0;
+                var gzip = false;
+                while (i < ae.len) {
+                    const segStart = i;
+                    while (i < ae.len and ae[i] != ',') i += 1;
+                    var seg = ae[segStart..i];
+                    var s: usize = 0;
+                    while (s < seg.len and (seg[s] == ' ' or seg[s] == '\t')) s += 1;
+                    var e: usize = seg.len;
+                    while (e > s and (seg[e - 1] == ' ' or seg[e - 1] == '\t')) e -= 1;
+                    seg = seg[s..e];
+                    i += 1;
+                    if (std.mem.eql(u8, seg, "gzip")) gzip = true;
+                }
+                if (gzip) encoding = "gzip";
+            }
+        }
+
+        var out = try std.ArrayList(u8).initCapacity(a, 64);
+        defer out.deinit(a);
+        try out.appendSlice(a, "{\"encoding\":\"");
+        try appendEscapedStr(a, &out, encoding);
+        try out.appendSlice(a, "\"}");
+        try emitOk(init, a, &out, true);
+        return;
+    }
+
+    if (std.mem.eql(u8, op, "web.host.check")) {
+        const hostJv = jsonObjGet(input, "host") orelse return error.MissingHost;
+        if (hostJv.typ != .str) return error.ExpectedString;
+        const host = hostJv.str;
+        var colon: ?usize = null;
+        var i: usize = 0;
+        while (i < host.len) {
+            if (host[i] == ':') { colon = i; break; }
+            i += 1;
+        }
+        const hostPart = if (colon) |c| host[0..c] else host;
+        const allowed = std.mem.eql(u8, hostPart, "127.0.0.1") or std.mem.eql(u8, hostPart, "0.0.0.0");
+
+        var out = try std.ArrayList(u8).initCapacity(a, 64);
+        defer out.deinit(a);
+        try out.appendSlice(a, "{\"allowed\":");
+        try out.appendSlice(a, if (allowed) "true" else "false");
+        try out.appendSlice(a, "}");
+        try emitOk(init, a, &out, true);
+        return;
+    }
+
+    if (std.mem.eql(u8, op, "web.auth.basic")) {
+        const authJv = jsonObjGet(input, "authorization");
+        const authorization = if (authJv) |v| (if (v.typ == .str) v.str else null) else null;
+        const expectedUserJv = jsonObjGet(input, "expectedUser") orelse return error.MissingExpectedUser;
+        const expectedPassJv = jsonObjGet(input, "expectedPass") orelse return error.MissingExpectedPass;
+        if (expectedUserJv.typ != .str or expectedPassJv.typ != .str) return error.ExpectedString;
+        const expectedUser = expectedUserJv.str;
+        const expectedPass = expectedPassJv.str;
+
+        var authenticated = false;
+        if (authorization) |auth| {
+            var basic = auth.len >= 6 and auth[5] == ' ';
+            if (basic) {
+                var k: usize = 0;
+                while (k < 5) {
+                    if (std.ascii.toLower(auth[k]) != std.ascii.toLower("Basic"[k])) { basic = false; break; }
+                    k += 1;
+                }
+            }
+            if (basic) {
+                const encoded = auth[6..];
+                const decoder = std.base64.standard.Decoder;
+                const exactLen = try decoder.calcSizeForSlice(encoded);
+                var credBuf = try a.alloc(u8, exactLen);
+                defer a.free(credBuf);
+                try decoder.decode(credBuf, encoded);
+                const credentials = credBuf[0..exactLen];
+
+                var colon: ?usize = null;
+                var k: usize = 0;
+                while (k < credentials.len) {
+                    if (credentials[k] == ':') { colon = k; break; }
+                    k += 1;
+                }
+                const user = if (colon) |c| credentials[0..c] else credentials;
+                const pass = if (colon) |c| credentials[c + 1..] else "";
+                if (std.mem.eql(u8, user, expectedUser) and std.mem.eql(u8, pass, expectedPass)) {
+                    authenticated = true;
+                }
+            }
+        }
+
+        var out = try std.ArrayList(u8).initCapacity(a, 64);
+        defer out.deinit(a);
+        if (!authenticated) {
+            return emitErr(init, "unauthorized", 401);
+        }
+        try out.appendSlice(a, "{\"authenticated\":true}");
+        try emitOk(init, a, &out, true);
+        return;
+    }
+
+    if (std.mem.eql(u8, op, "web.static.resolve")) {
+        const assetsJv = jsonObjGet(input, "assets") orelse return error.MissingAssets;
+        if (assetsJv.typ != .arr) return error.ExpectedArray;
+        const urlPathJv = jsonObjGet(input, "urlPath") orelse return error.MissingUrlPath;
+        if (urlPathJv.typ != .str) return error.ExpectedString;
+        const urlPath = urlPathJv.str;
+
+        const decoded = try percentDecode(a, urlPath);
+        defer a.free(decoded);
+
+        var start: usize = 0;
+        var i: usize = 0;
+        while (i <= decoded.len) {
+            if (i == decoded.len or decoded[i] == '/') {
+                if (std.mem.eql(u8, decoded[start..i], "..")) {
+                    return emitErr(init, "traversal", 1);
+                }
+                start = i + 1;
+            }
+            i += 1;
+        }
+
+        var assetPath: ?[]const u8 = null;
+        for (assetsJv.arr) |assetJv| {
+            if (assetJv.typ != .obj) continue;
+            const urlJv = jsonObjGet(assetJv, "url") orelse continue;
+            if (urlJv.typ != .str) continue;
+            if (std.mem.eql(u8, decoded, urlJv.str)) {
+                const pathJv = jsonObjGet(assetJv, "path") orelse continue;
+                if (pathJv.typ == .str) assetPath = pathJv.str;
+                break;
+            }
+        }
+
+        var out = try std.ArrayList(u8).initCapacity(a, 64);
+        defer out.deinit(a);
+        try out.appendSlice(a, "{\"assetPath\":");
+        if (assetPath) |p| {
+            try emitJsonStr(a, &out, p);
+        } else {
+            try out.appendSlice(a, "null");
+        }
+        try out.appendSlice(a, "}");
+        try emitOk(init, a, &out, true);
+        return;
+    }
+
+    if (std.mem.eql(u8, op, "web.index-injections.render")) {
+        const htmlJv = jsonObjGet(input, "html") orelse return error.MissingHtml;
+        if (htmlJv.typ != .str) return error.ExpectedString;
+        const html = htmlJv.str;
+        const rowsJv = jsonObjGet(input, "rows") orelse return error.MissingRows;
+        if (rowsJv.typ != .arr) return error.ExpectedArray;
+
+        var headBuf = try std.ArrayList(u8).initCapacity(a, 64);
+        defer headBuf.deinit(a);
+        var bodyBuf = try std.ArrayList(u8).initCapacity(a, 64);
+        defer bodyBuf.deinit(a);
+
+        for (rowsJv.arr) |rowJv| {
+            if (rowJv.typ != .obj) continue;
+            const kindJv = jsonObjGet(rowJv, "kind") orelse continue;
+            if (kindJv.typ != .str) continue;
+            const placementJv = jsonObjGet(rowJv, "placement");
+            const isHead = if (placementJv) |p| p.typ == .str and std.mem.eql(u8, p.str, "head") else true;
+            const into = if (isHead) &headBuf else &bodyBuf;
+
+            if (std.mem.eql(u8, kindJv.str, "global")) {
+                const nameJv = jsonObjGet(rowJv, "name") orelse continue;
+                const valJv = jsonObjGet(rowJv, "value");
+                if (nameJv.typ != .str) continue;
+                try into.appendSlice(a, "<script>globalThis[");
+                try emitJsonStr(a, into,  nameJv.str);
+                try into.appendSlice(a, "] = ");
+                if (valJv) |v| {
+                    try emitJsonValue(a, into,  v);
+                } else {
+                    try into.appendSlice(a, "undefined");
+                }
+                try into.appendSlice(a, "</script>");
+            } else if (std.mem.eql(u8, kindJv.str, "script")) {
+                const textJv = jsonObjGet(rowJv, "text") orelse continue;
+                if (textJv.typ != .str) continue;
+                try into.appendSlice(a, "<script>");
+                try appendEscapedStr(a, into,  textJv.str);
+                try into.appendSlice(a, "</script>");
+            } else if (std.mem.eql(u8, kindJv.str, "style")) {
+                const textJv = jsonObjGet(rowJv, "text") orelse continue;
+                if (textJv.typ != .str) continue;
+                try into.appendSlice(a, "<style>");
+                try appendEscapedStr(a, into,  textJv.str);
+                try into.appendSlice(a, "</style>");
+            } else if (std.mem.eql(u8, kindJv.str, "html")) {
+                const htmlJv2 = jsonObjGet(rowJv, "html") orelse continue;
+                if (htmlJv2.typ != .str) continue;
+                try into.appendSlice(a, htmlJv2.str);
+            } else if (std.mem.eql(u8, kindJv.str, "script-src")) {
+                const srcJv = jsonObjGet(rowJv, "src") orelse continue;
+                if (srcJv.typ != .str) continue;
+                try into.appendSlice(a, "<script src=\"");
+                try appendEscapedStr(a, into,  srcJv.str);
+                try into.appendSlice(a, "\"></script>");
+            } else if (std.mem.eql(u8, kindJv.str, "script-preload")) {
+                const srcJv = jsonObjGet(rowJv, "src") orelse continue;
+                if (srcJv.typ != .str) continue;
+                try into.appendSlice(a, "<link rel=\"preload\" as=\"script\" href=\"");
+                try appendEscapedStr(a, into,  srcJv.str);
+                try into.appendSlice(a, "\">");
+            }
+        }
+        const ready = "<script>(globalThis.__DSH_BOOT_READY__ ??= Promise.withResolvers()).resolve()</script>";
+        try bodyBuf.appendSlice(a, ready);
+
+        const headAt = findOpenTag(html, "head");
+        const bodyAt = findOpenTag(html, "body");
+
+        var finalOut = try std.ArrayList(u8).initCapacity(a, html.len + headBuf.items.len + bodyBuf.items.len);
+        defer finalOut.deinit(a);
+        var cursor: usize = 0;
+        if (headAt) |at| {
+            try finalOut.appendSlice(a, html[0..at]);
+            try finalOut.appendSlice(a, headBuf.items);
+            cursor = at;
+        }
+        if (bodyAt) |ba| {
+            try finalOut.appendSlice(a, html[cursor..ba]);
+            try finalOut.appendSlice(a, bodyBuf.items);
+            cursor = ba;
+        }
+        try finalOut.appendSlice(a, html[cursor..]);
+        try emitOk(init, a, &finalOut, false);
+        return;
+    }
+
+    const msg = try std.fmt.allocPrint(a, "unknown web op: {s}", .{op});
+    defer a.free(msg);
+    return emitErr(init, msg, 2);
 }

@@ -1,0 +1,33 @@
+{
+  "schema": "conformance.scenario.v1",
+  "category": "web",
+  "description": "Embedded static-asset resolution — exact URL-path match, percent-decoded traversal is rejected.",
+  "target": "node",
+  "entry": "../conformance/web-server.ts",
+  "function": "runWebOp",
+  "scenarios": [
+    {
+      "id": "web.static.resolve",
+      "description": "Embedded static asset resolves by exact URL path.",
+      "input": {
+        "op": "web.static.resolve",
+        "assets": [
+          { "url": "/index.html", "path": "dist/index.html" },
+          { "url": "/app.js", "path": "dist/assets/app.js" }
+        ],
+        "urlPath": "/app.js"
+      },
+      "expected": { "assetPath": "dist/assets/app.js" }
+    },
+    {
+      "id": "web.static.traversal-rejected",
+      "description": "Path traversal in the URL path is rejected, never served.",
+      "input": {
+        "op": "web.static.resolve",
+        "assets": [{ "url": "/index.html", "path": "dist/index.html" }],
+        "urlPath": "/..%2f..%2fetc/passwd"
+      },
+      "expected": { "ok": false, "error": "traversal", "exitCode": 1 }
+    }
+  ]
+}

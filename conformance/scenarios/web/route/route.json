@@ -1,0 +1,68 @@
+{
+  "schema": "conformance.scenario.v1",
+  "category": "web",
+  "description": "HTTP route selection — exact beats prefix, longest prefix wins, prefix owns its own path, no match is null.",
+  "target": "node",
+  "entry": "../conformance/web-server.ts",
+  "function": "runWebOp",
+  "scenarios": [
+    {
+      "id": "web.route.select-exact-wins",
+      "description": "An exact route beats a prefix route for the same path.",
+      "input": {
+        "op": "web.route.select",
+        "routes": [
+          { "kind": "prefix", "path": "/api" },
+          { "kind": "exact", "path": "/probe" }
+        ],
+        "pathname": "/probe"
+      },
+      "expected": { "matched": { "kind": "exact", "path": "/probe" } }
+    },
+    {
+      "id": "web.route.select-longest-prefix-wins",
+      "description": "Longest prefix wins after an exact-table miss.",
+      "input": {
+        "op": "web.route.select",
+        "routes": [
+          { "kind": "prefix", "path": "/api" },
+          { "kind": "prefix", "path": "/api/deep" }
+        ],
+        "pathname": "/api/deep/leaf"
+      },
+      "expected": { "matched": { "kind": "prefix", "path": "/api/deep" } }
+    },
+    {
+      "id": "web.route.select-prefix-own-path",
+      "description": "A prefix route answers its own pathname.",
+      "input": {
+        "op": "web.route.select",
+        "routes": [{ "kind": "prefix", "path": "/api" }],
+        "pathname": "/api"
+      },
+      "expected": { "matched": { "kind": "prefix", "path": "/api" } }
+    },
+    {
+      "id": "web.route.select-fallback-404",
+      "description": "No named route matches → null (fallback seat or 404).",
+      "input": {
+        "op": "web.route.select",
+        "routes": [{ "kind": "prefix", "path": "/api" }],
+        "pathname": "/no/such/route"
+      },
+      "expected": { "matched": null }
+    },
+    {
+      "id": "web.route.dup-throws",
+      "description": "Duplicate (kind, path) registration is a misconfiguration.",
+      "input": {
+        "op": "web.route.dup-throws",
+        "routes": [
+          { "kind": "exact", "path": "/probe" },
+          { "kind": "exact", "path": "/probe" }
+        ]
+      },
+      "expected": { "ok": false, "error": "webserver: duplicate exact route \"/probe\"", "exitCode": 1 }
+    }
+  ]
+}

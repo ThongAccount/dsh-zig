@@ -1,0 +1,10 @@
+{
+  "caseId": "web.route.select-longest-prefix-wins",
+  "ok": true,
+  "output": {
+    "matched": {
+      "kind": "prefix",
+      "path": "/api/deep"
+    }
+  }
+}

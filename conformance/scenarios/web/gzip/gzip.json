@@ -1,0 +1,54 @@
+{
+  "schema": "conformance.scenario.v1",
+  "category": "web",
+  "description": "Response gzip eligibility — never for text/event-stream, never below threshold, gzip when Accept-Encoding allows.",
+  "target": "node",
+  "entry": "../conformance/web-server.ts",
+  "function": "runWebOp",
+  "scenarios": [
+    {
+      "id": "web.gzip.eligible",
+      "description": "Compressible content with gzip in Accept-Encoding → gzip.",
+      "input": {
+        "op": "web.gzip.decision",
+        "contentType": "text/plain; charset=utf-8",
+        "contentLength": 2000,
+        "acceptEncoding": "br, gzip, deflate"
+      },
+      "expected": { "encoding": "gzip" }
+    },
+    {
+      "id": "web.gzip.event-stream-never",
+      "description": "text/event-stream is never compressed (unknown-length stream).",
+      "input": {
+        "op": "web.gzip.decision",
+        "contentType": "text/event-stream",
+        "contentLength": null,
+        "acceptEncoding": "gzip"
+      },
+      "expected": { "encoding": "identity" }
+    },
+    {
+      "id": "web.gzip.below-threshold",
+      "description": "Responses below the 1024-byte threshold are not compressed.",
+      "input": {
+        "op": "web.gzip.decision",
+        "contentType": "text/plain",
+        "contentLength": 5,
+        "acceptEncoding": "gzip"
+      },
+      "expected": { "encoding": "identity" }
+    },
+    {
+      "id": "web.gzip.no-accept-encoding",
+      "description": "No gzip in Accept-Encoding → identity.",
+      "input": {
+        "op": "web.gzip.decision",
+        "contentType": "text/plain",
+        "contentLength": 2000,
+        "acceptEncoding": "identity"
+      },
+      "expected": { "encoding": "identity" }
+    }
+  ]
+}

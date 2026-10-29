@@ -1,0 +1,7 @@
+{
+  "caseId": "web.static.resolve",
+  "ok": true,
+  "output": {
+    "assetPath": "dist/assets/app.js"
+  }
+}

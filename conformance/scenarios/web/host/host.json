@@ -1,0 +1,28 @@
+{
+  "schema": "conformance.scenario.v1",
+  "category": "web",
+  "description": "Bind-host check — only the two configured bind hosts pass; hostname before optional :port is validated.",
+  "target": "node",
+  "entry": "../conformance/web-server.ts",
+  "function": "runWebOp",
+  "scenarios": [
+    {
+      "id": "web.host.check-allowed",
+      "description": "Configured bind hosts (loopback / all-interfaces) pass the host check.",
+      "input": { "op": "web.host.check", "host": "127.0.0.1" },
+      "expected": { "allowed": true }
+    },
+    {
+      "id": "web.host.check-rejected",
+      "description": "Any host outside the two configured values fails the check.",
+      "input": { "op": "web.host.check", "host": "evil.com" },
+      "expected": { "allowed": false }
+    },
+    {
+      "id": "web.host.check-zero-port-form",
+      "description": "Host with port suffix still validates the hostname part.",
+      "input": { "op": "web.host.check", "host": "0.0.0.0:8080" },
+      "expected": { "allowed": true }
+    }
+  ]
+}

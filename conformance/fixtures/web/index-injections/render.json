@@ -1,0 +1,5 @@
+{
+  "caseId": "web.index-injections.render",
+  "ok": true,
+  "output": "<html><head><script>window.__Q__=1</script><script>globalThis[\"__DSH_BOOT__\"] = {\"rev\":1}</script><style>body{margin:0}</style></head><body><meta name=\"probe\"><script>window.__P__=1</script><script>(globalThis.__DSH_BOOT_READY__ ??= Promise.withResolvers()).resolve()</script>shell</body></html>"
+}

@@ -1,0 +1,7 @@
+{
+  "caseId": "web.host.check-zero-port-form",
+  "ok": true,
+  "output": {
+    "allowed": true
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "caseId": "web.route.select-prefix-own-path",
+  "ok": true,
+  "output": {
+    "matched": {
+      "kind": "prefix",
+      "path": "/api"
+    }
+  }
+}

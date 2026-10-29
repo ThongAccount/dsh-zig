@@ -1,0 +1,6 @@
+{
+  "caseId": "web.upgrade.dup-throws",
+  "ok": false,
+  "error": "webserver: duplicate upgrade route \"/events\"",
+  "exitCode": 1
+}

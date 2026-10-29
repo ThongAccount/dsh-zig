@@ -1,0 +1,10 @@
+{
+  "caseId": "web.route.select-exact-wins",
+  "ok": true,
+  "output": {
+    "matched": {
+      "kind": "exact",
+      "path": "/probe"
+    }
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "schema": "conformance.scenario.v1",
+  "category": "web",
+  "description": "Structured index-injection rendering — head rows after <head>, body rows after <body>, boot-ready tail last.",
+  "target": "node",
+  "entry": "../conformance/web-server.ts",
+  "function": "runWebOp",
+  "scenarios": [
+    {
+      "id": "web.index-injections.render",
+      "description": "Structured index-injection rows render head after <head>, body after <body>, boot-ready tail last.",
+      "input": {
+        "op": "web.index-injections.render",
+        "html": "<html><head></head><body>shell</body></html>",
+        "rows": [
+          { "kind": "script", "placement": "head", "text": "window.__Q__=1" },
+          { "kind": "global", "name": "__DSH_BOOT__", "value": { "rev": 1 } },
+          { "kind": "style", "text": "body{margin:0}" },
+          { "kind": "html", "placement": "body", "html": "<meta name=\"probe\">" },
+          { "kind": "script", "placement": "body", "text": "window.__P__=1" }
+        ]
+      },
+      "expected": { "ok": true }
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "caseId": "web.host.check-allowed",
+  "ok": true,
+  "output": {
+    "allowed": true
+  }
+}

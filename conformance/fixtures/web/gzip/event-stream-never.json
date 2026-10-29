@@ -1,0 +1,7 @@
+{
+  "caseId": "web.gzip.event-stream-never",
+  "ok": true,
+  "output": {
+    "encoding": "identity"
+  }
+}

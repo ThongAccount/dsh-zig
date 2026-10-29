@@ -1,0 +1,7 @@
+{
+  "caseId": "web.gzip.no-accept-encoding",
+  "ok": true,
+  "output": {
+    "encoding": "identity"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "caseId": "web.upgrade.select",
+  "ok": true,
+  "output": {
+    "matched": {
+      "path": "/api/mux"
+    }
+  }
+}

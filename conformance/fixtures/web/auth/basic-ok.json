@@ -1,0 +1,7 @@
+{
+  "caseId": "web.auth.basic-ok",
+  "ok": true,
+  "output": {
+    "authenticated": true
+  }
+}

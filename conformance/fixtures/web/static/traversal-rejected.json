@@ -1,0 +1,6 @@
+{
+  "caseId": "web.static.traversal-rejected",
+  "ok": false,
+  "error": "traversal",
+  "exitCode": 1
+}

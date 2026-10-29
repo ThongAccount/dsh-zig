@@ -1,0 +1,7 @@
+{
+  "caseId": "web.gzip.below-threshold",
+  "ok": true,
+  "output": {
+    "encoding": "identity"
+  }
+}

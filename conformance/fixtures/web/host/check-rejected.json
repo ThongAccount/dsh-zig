@@ -1,0 +1,7 @@
+{
+  "caseId": "web.host.check-rejected",
+  "ok": true,
+  "output": {
+    "allowed": false
+  }
+}

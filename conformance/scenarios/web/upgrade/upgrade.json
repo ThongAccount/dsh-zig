@@ -1,0 +1,39 @@
+{
+  "schema": "conformance.scenario.v1",
+  "category": "web",
+  "description": "WebSocket upgrade route selection — exact pathname match, miss means no owner, duplicates throw.",
+  "target": "node",
+  "entry": "../conformance/web-server.ts",
+  "function": "runWebOp",
+  "scenarios": [
+    {
+      "id": "web.upgrade.select",
+      "description": "WebSocket upgrade route matches by exact pathname.",
+      "input": {
+        "op": "web.upgrade.select",
+        "upgrades": [{ "path": "/events" }, { "path": "/api/mux" }],
+        "pathname": "/api/mux"
+      },
+      "expected": { "matched": { "path": "/api/mux" } }
+    },
+    {
+      "id": "web.upgrade.select-miss",
+      "description": "Unknown upgrade pathname → no owner, socket destroyed.",
+      "input": {
+        "op": "web.upgrade.select",
+        "upgrades": [{ "path": "/events" }],
+        "pathname": "/no/such/upgrade"
+      },
+      "expected": { "matched": null }
+    },
+    {
+      "id": "web.upgrade.dup-throws",
+      "description": "Duplicate upgrade path throws — one socket, one protocol owner.",
+      "input": {
+        "op": "web.upgrade.dup-throws",
+        "upgrades": [{ "path": "/events" }, { "path": "/events" }]
+      },
+      "expected": { "ok": false, "error": "webserver: duplicate upgrade route \"/events\"", "exitCode": 1 }
+    }
+  ]
+}
