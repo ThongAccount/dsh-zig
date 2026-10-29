@@ -1,0 +1,24 @@
+{
+  "caseId": "agent.tool-pairing.closed-step-balanced",
+  "ok": true,
+  "output": [
+    {
+      "balanced": true
+    },
+    {
+      "balanced": true
+    },
+    {
+      "balanced": true
+    },
+    {
+      "balanced": false
+    },
+    {
+      "balanced": false
+    },
+    {
+      "balanced": true
+    }
+  ]
+}

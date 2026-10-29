@@ -1,0 +1,12 @@
+{
+  "caseId": "agent.tool-pairing.open-call-unbalanced",
+  "ok": true,
+  "output": [
+    {
+      "balanced": true
+    },
+    {
+      "balanced": false
+    }
+  ]
+}

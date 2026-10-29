@@ -1,0 +1,12 @@
+{
+  "caseId": "agent.tool-pairing.neutral-node-crosses-open-pair",
+  "ok": true,
+  "output": [
+    {
+      "balanced": false
+    },
+    {
+      "balanced": false
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "caseId": "agent.tool-pairing.missing-seq-throws",
+  "ok": true,
+  "output": [
+    {
+      "error": "tool-pairing balance: surface seq 999 not found"
+    }
+  ]
+}

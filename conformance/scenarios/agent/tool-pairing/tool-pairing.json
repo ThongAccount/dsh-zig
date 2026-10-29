@@ -1,0 +1,114 @@
+{
+  "schema": "conformance.scenario.v1",
+  "category": "agent",
+  "description": "Agent loop tool-history: tool-call/result pairing balance at surface cuts (turn boundaries for compaction safe cuts).",
+  "target": "node",
+  "entry": "packages/compaction/compaction/src/conformance-tool-pairing.ts",
+  "function": "conformanceToolPairing",
+  "scenarios": [
+    {
+      "id": "agent.tool-pairing.closed-step-balanced",
+      "description": "A closed assistant tool-call/result step: cuts outside the pair are balanced, the cut inside (after the call, before the result) is not.",
+      "input": {
+        "surfaceNodes": [0, 1, 2],
+        "events": [
+          { "seq": 0, "type": "user/message", "data": { "message": { "content": [{ "type": "text", "text": "go" }] } } },
+          { "seq": 1, "type": "assistant/message", "data": { "message": { "content": [{ "type": "tool-call", "id": "c1", "name": "bash", "arguments": "{}" }] } } },
+          { "seq": 2, "type": "tool/result", "data": {} }
+        ],
+        "queries": [
+          { "seq": 0, "kind": "before" },
+          { "seq": 0, "kind": "after" },
+          { "seq": 1, "kind": "before" },
+          { "seq": 1, "kind": "after" },
+          { "seq": 2, "kind": "before" },
+          { "seq": 2, "kind": "after" }
+        ]
+      },
+      "expected": [ { "balanced": true }, { "balanced": true }, { "balanced": true }, { "balanced": false }, { "balanced": false }, { "balanced": true } ]
+    },
+    {
+      "id": "agent.tool-pairing.open-call-unbalanced",
+      "description": "An assistant tool-call with no matching result leaves the cut after it unbalanced.",
+      "input": {
+        "surfaceNodes": [0, 1],
+        "events": [
+          { "seq": 0, "type": "user/message", "data": { "message": { "content": [{ "type": "text", "text": "go" }] } } },
+          { "seq": 1, "type": "assistant/message", "data": { "message": { "content": [{ "type": "tool-call", "id": "c1", "name": "bash", "arguments": "{}" }] } } }
+        ],
+        "queries": [
+          { "seq": 1, "kind": "before" },
+          { "seq": 1, "kind": "after" }
+        ]
+      },
+      "expected": [ { "balanced": true }, { "balanced": false } ]
+    },
+    {
+      "id": "agent.tool-pairing.multiple-calls-require-all-results",
+      "description": "An assistant message with two tool calls is balanced only after both results arrive.",
+      "input": {
+        "surfaceNodes": [0, 1, 2],
+        "events": [
+          { "seq": 0, "type": "assistant/message", "data": { "message": { "content": [
+            { "type": "tool-call", "id": "c1", "name": "one", "arguments": "{}" },
+            { "type": "tool-call", "id": "c2", "name": "two", "arguments": "{}" }
+          ] } } },
+          { "seq": 1, "type": "tool/result", "data": {} },
+          { "seq": 2, "type": "tool/result", "data": {} }
+        ],
+        "queries": [
+          { "seq": 0, "kind": "before" },
+          { "seq": 0, "kind": "after" },
+          { "seq": 1, "kind": "after" },
+          { "seq": 2, "kind": "after" }
+        ]
+      },
+      "expected": [ { "balanced": true }, { "balanced": false }, { "balanced": false }, { "balanced": true } ]
+    },
+    {
+      "id": "agent.tool-pairing.neutral-node-crosses-open-pair",
+      "description": "A neutral user message inserted between a tool call and its result keeps the surrounding cuts unbalanced.",
+      "input": {
+        "surfaceNodes": [0, 1, 2],
+        "events": [
+          { "seq": 0, "type": "assistant/message", "data": { "message": { "content": [{ "type": "tool-call", "id": "c1", "name": "bash", "arguments": "{}" }] } } },
+          { "seq": 1, "type": "user/message", "data": { "message": { "content": [{ "type": "text", "text": "background update" }] } } },
+          { "seq": 2, "type": "tool/result", "data": {} }
+        ],
+        "queries": [
+          { "seq": 1, "kind": "before" },
+          { "seq": 1, "kind": "after" }
+        ]
+      },
+      "expected": [ { "balanced": false }, { "balanced": false } ]
+    },
+    {
+      "id": "agent.tool-pairing.missing-seq-throws",
+      "description": "Querying a seq absent from the current surface throws.",
+      "input": {
+        "surfaceNodes": [0],
+        "events": [
+          { "seq": 0, "type": "user/message", "data": { "message": { "content": [{ "type": "text", "text": "hi" }] } } }
+        ],
+        "queries": [
+          { "seq": 999, "kind": "before" }
+        ]
+      },
+      "expected": [ { "error": "tool-pairing balance: surface seq 999 not found" } ]
+    },
+    {
+      "id": "agent.tool-pairing.orphan-result-throws",
+      "description": "A tool/result with no preceding open tool call throws a corrupt-surface error.",
+      "input": {
+        "surfaceNodes": [0],
+        "events": [
+          { "seq": 0, "type": "tool/result", "data": {} }
+        ],
+        "queries": [
+          { "seq": 0, "kind": "after" }
+        ]
+      },
+      "expected": [ { "error": "tool-pairing balance: tool/result at surface seq 0 has no matching tool-call (corrupt surface)" } ]
+    }
+  ]
+}

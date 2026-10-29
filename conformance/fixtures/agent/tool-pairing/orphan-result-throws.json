@@ -1,0 +1,9 @@
+{
+  "caseId": "agent.tool-pairing.orphan-result-throws",
+  "ok": true,
+  "output": [
+    {
+      "error": "tool-pairing balance: tool/result at surface seq 0 has no matching tool-call (corrupt surface)"
+    }
+  ]
+}

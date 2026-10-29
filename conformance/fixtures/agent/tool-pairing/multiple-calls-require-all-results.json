@@ -1,0 +1,18 @@
+{
+  "caseId": "agent.tool-pairing.multiple-calls-require-all-results",
+  "ok": true,
+  "output": [
+    {
+      "balanced": true
+    },
+    {
+      "balanced": false
+    },
+    {
+      "balanced": false
+    },
+    {
+      "balanced": true
+    }
+  ]
+}
